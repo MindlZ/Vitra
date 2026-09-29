@@ -21,6 +21,8 @@
   ·
   <a href="#getting-started">Getting started</a>
   ·
+  <a href="#api-keys-optional">API keys</a>
+  ·
   <a href="docs/how-it-works.md">How it works</a>
   ·
   <a href="https://ko-fi.com/mindlz">Support</a>
@@ -130,31 +132,40 @@ Light wallpapers get a light look, and dark ones a dark look, automatically.
 Vitra scans your stores the first time it opens. Everything works without any
 of the optional setup below.
 
-### Steam friends (optional)
+### API keys (optional)
 
-To see which friends are online, Vitra needs a free Steam Web API key.
+Two free API keys unlock extras. Both go in **Settings → Connections**.
+
+| Key | What it adds | Where to get it |
+| --- | --- | --- |
+| Steam Web API key | See which Steam friends are online and what they're playing | [steamcommunity.com/dev/apikey](https://steamcommunity.com/dev/apikey) |
+| SteamGridDB API key | Cover art for Epic, GOG, Xbox, non-Steam and your own games | [steamgriddb.com](https://www.steamgriddb.com/profile/preferences/api) |
+
+Keys are encrypted with your Windows account before they're saved, and each is
+only ever sent to the service it belongs to.
+
+#### Steam Web API key
 
 1. Go to [steamcommunity.com/dev/apikey](https://steamcommunity.com/dev/apikey)
-   and sign in.
-2. Enter any domain name (`localhost` is fine), accept the terms and copy the key.
-3. In Vitra, open **Settings → Connections** and paste it into **Steam Web API key**.
+   and sign in with Steam.
+2. Enter any domain name (`localhost` is fine), accept the terms and click
+   **Register**.
+3. Copy the key it shows you.
+4. In Vitra, open **Settings → Connections** and paste it into **Steam Web API key**.
+5. Make your **friends list** public, or Steam won't share it: Steam → your
+   profile → **Edit Profile → Privacy Settings → Friends List: Public**.
 
-Your **friends list** has to be public for Steam to share it: Steam → your
-profile → **Edit Profile → Privacy Settings → Friends List: Public**.
+#### SteamGridDB API key
 
-The key is encrypted with your Windows account before it's saved, and is only
-ever sent to Steam.
-
-### Cover art for non-Steam games (optional)
-
-Steam games get their art automatically. For Epic, GOG, Xbox, shortcuts and
-games you add yourself, a free SteamGridDB key fills in the gaps.
+Steam games already get their art automatically; this fills in everything else.
 
 1. Sign in at [steamgriddb.com](https://www.steamgriddb.com) (you can use your
    Steam account).
 2. Open [Preferences → API](https://www.steamgriddb.com/profile/preferences/api)
-   and generate a key.
-3. Paste it into **Settings → Connections → SteamGridDB key**.
+   and click **Generate API Key**.
+3. Copy the key and paste it into **Settings → Connections → SteamGridDB key**.
+4. Restart Vitra (quit from the tray icon and open it again) to fetch the
+   missing art.
 
 You can also set any image as a game's cover or background from its page.
 
