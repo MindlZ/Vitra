@@ -45,72 +45,76 @@ games, so ownership, cloud saves and anti-cheat work exactly as they normally do
 
 ## Features
 
-- **Every store in one library.** Installed and owned Steam games, Steam
-  shortcuts, Epic, GOG, Xbox / Game Pass, and any `.exe` you add yourself.
-  Games you own but haven't installed show up too, ready to install.
-- **Playtime tracking.** Time played, sessions and last played, for every game,
-  including ones Steam never tracked. Steam's own hours are imported on first run.
-- **Cover art, automatically.** Pulled from Steam, your custom Steam artwork, and
-  SteamGridDB, with your own images as an option.
-- **Big picture mode.** Fullscreen and controller-first, with power options to
-  sleep, restart or shut down the PC from the couch.
-- **Controller support** throughout the app, not just in big picture.
-- **Friends.** See which Steam friends are online and what they're playing.
-- **Captures.** Your Steam screenshots and Xbox Game Bar captures, on each game's page.
-- **Now playing.** What's playing on your PC, with a visualiser, on the home screen.
-- **Discord status.** Show the game you're playing on your Discord profile.
-- **Your look.** Pick any wallpaper and Vitra takes its colours from it.
-- **Favourites, tags, search and a Programs tab** for apps like Wallpaper Engine.
-- **Automatic updates** from this repository's releases.
+### Every store, one library
 
-## Screenshots
-
-<table>
-  <tr>
-    <td width="50%"><img src="docs/images/library.jpg" alt="The library" /></td>
-    <td width="50%"><img src="docs/images/game.jpg" alt="A game's page" /></td>
-  </tr>
-  <tr>
-    <td align="center"><sub>Every store in one library</sub></td>
-    <td align="center"><sub>Playtime and details for each game</sub></td>
-  </tr>
-  <tr>
-    <td width="50%"><img src="docs/images/big-picture.jpg" alt="Big picture mode" /></td>
-    <td width="50%"><img src="docs/images/big-picture-home.jpg" alt="Big picture home" /></td>
-  </tr>
-  <tr>
-    <td align="center"><sub>Big picture mode, for the TV and a controller</sub></td>
-    <td align="center"><sub>Big picture home</sub></td>
-  </tr>
-</table>
-
-### Wallpapers
-
-Four to choose from, or use your own. The whole app takes its colours from
-whichever you pick, and switches to a light or dark look to suit it.
-
-<table>
-  <tr>
-    <td width="50%"><img src="docs/images/home.jpg" alt="Sunset" /></td>
-    <td width="50%"><img src="docs/images/home-smoke.jpg" alt="Smoke" /></td>
-  </tr>
-  <tr>
-    <td align="center"><sub>Sunset · dark</sub></td>
-    <td align="center"><sub>Smoke · light</sub></td>
-  </tr>
-  <tr>
-    <td width="50%"><img src="docs/images/home-moon.jpg" alt="Moon" /></td>
-    <td width="50%"><img src="docs/images/home-tree.jpg" alt="Tree" /></td>
-  </tr>
-  <tr>
-    <td align="center"><sub>Moon · dark</sub></td>
-    <td align="center"><sub>Tree · light</sub></td>
-  </tr>
-</table>
+Installed and owned Steam games, your non-Steam shortcuts, Epic, GOG, Xbox /
+Game Pass, and any `.exe` you add yourself, all in one grid. Games you own but
+haven't installed are there too, ready to install. Cover art comes in
+automatically, and you can sort, search, favourite and tag everything.
 
 <p align="center">
-  <img src="docs/images/settings.jpg" alt="Choosing a wallpaper in Settings" width="720" />
+  <img src="docs/images/library.jpg" alt="The library" width="900" />
 </p>
+
+### A page for every game
+
+Every game gets its own page with its artwork, how long you've played, when
+you last played it, and your screenshots and clips from Steam and the Xbox Game
+Bar. Playtime is tracked for every game, even ones Steam never counted, and
+your existing Steam hours are imported when you first open Vitra.
+
+<p align="center">
+  <img src="docs/images/game.jpg" alt="A game's page" width="900" />
+</p>
+
+### A home screen worth leaving open
+
+A clock, whatever's playing on your PC with a visualiser that moves to it, the
+game you were last playing, and which friends are online. Leave it long enough
+and it turns into a screen saver.
+
+<p align="center">
+  <img src="docs/images/home-moon.jpg" alt="The home screen" width="900" />
+</p>
+
+### Big picture mode
+
+A fullscreen, controller-first view for playing on the TV. Browse your
+library from the couch, launch games, and sleep, restart or shut down the PC
+without getting up.
+
+<p align="center">
+  <img src="docs/images/big-picture.jpg" alt="Big picture mode" width="900" />
+</p>
+
+Its home screen comes with you, too.
+
+<p align="center">
+  <img src="docs/images/big-picture-home.jpg" alt="Big picture home" width="900" />
+</p>
+
+### Make it yours
+
+Four wallpapers to choose from, or use any image of your own. Vitra takes its
+colours from whichever you pick.
+
+<p align="center">
+  <img src="docs/images/settings.jpg" alt="Choosing a wallpaper in Settings" width="900" />
+</p>
+
+Light wallpapers get a light look, and dark ones a dark look, automatically.
+
+<p align="center">
+  <img src="docs/images/home-smoke.jpg" alt="The light look" width="900" />
+</p>
+
+### And also
+
+- **Controller support** everywhere, not just in big picture.
+- **Discord status** that shows the game you're playing.
+- **A Programs tab** for apps like Wallpaper Engine, kept apart from your games.
+- **Runs in the tray** so playtime keeps tracking, and can start with Windows.
+- **Automatic updates** from this repository's releases.
 
 ## Getting started
 
