@@ -1,0 +1,49 @@
+# Packaging for Windows: `npm run dist` builds the app, then an installer in dist/.
+#
+# The installer is "assisted" (not one-click), so it asks where to install,
+# and whether for this user or everyone on the PC. Everything the renderer
+# needs (React, fonts, icons, sounds) is compiled into out/ by electron-vite,
+# so the package ships no node_modules at all.
+
+appId: com.mindlz.vitra
+productName: Vitra
+copyright: Copyright © 2026 MindlZ
+
+directories:
+  output: dist
+  # The installer's look lives here and is picked up by name: installer.nsh
+  # (colours, page text, fonts), installerSidebar.bmp and installerHeader.bmp
+  # (rendered from build/installer-art by its render.ps1).
+  buildResources: build
+
+# Only what the running app reads.
+files:
+  - out/**
+  - resources/**
+  - package.json
+  - "!**/*.map"
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: resources/icon.png
+
+nsis:
+  oneClick: false
+  # Lets the user pick the install folder on its own page.
+  allowToChangeInstallationDirectory: true
+  # Offers "Only for me" or "Anyone who uses this computer"; the per-machine
+  # choice elevates when it's picked.
+  perMachine: false
+  allowElevation: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Vitra
+  uninstallDisplayName: Vitra
+  # Installer and uninstaller use the app icon, converted from
+  # resources/icon.png (256px, the minimum for a Windows icon).
+  # Library, playtime and cached art live in %APPDATA%\Vitra; an uninstall
+  # (or an upgrade) must never take someone's history with it.
+  deleteAppDataOnUninstall: false
+  artifactName: Vitra-Setup-${version}.${ext}

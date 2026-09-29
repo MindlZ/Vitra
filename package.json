@@ -1,0 +1,35 @@
+{
+  "name": "vitra",
+  "productName": "Vitra",
+  "version": "0.1.0",
+  "description": "A custom game launcher for Steam, Epic, GOG, Xbox and local games",
+  "main": "./out/main/index.js",
+  "author": "MindlZ",
+  "repository": "github:MindlZ/Vitra",
+  "homepage": "https://github.com/MindlZ/Vitra",
+  "license": "GPL-3.0-only",
+  "private": true,
+  "scripts": {
+    "dev": "electron-vite dev -w",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "dist": "electron-vite build && electron-builder --win"
+  },
+  "devDependencies": {
+    "@fontsource-variable/bricolage-grotesque": "^5.3.0",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^5.2.0",
+    "electron": "^44.4.5",
+    "electron-builder": "^26.15.3",
+    "electron-updater": "^6.8.9",
+    "electron-vite": "^5.0.0",
+    "lucide-react": "^1.48.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2",
+    "vite": "^7.3.6"
+  }
+}

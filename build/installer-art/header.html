@@ -1,0 +1,91 @@
+<!doctype html>
+<!--
+  The installer's inner-page header image (150 x 57, top right of every page
+  between welcome and finish): the sunrise in miniature. Rendered to
+  build/installerHeader.bmp by render.ps1. Flat #120b17 at the edges, to meet
+  the header band's MUI_BGCOLOR.
+-->
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      html,
+      body {
+        margin: 0;
+        width: 150px;
+        height: 57px;
+        position: relative;
+        overflow: hidden;
+        background: #120b17;
+      }
+      .glow {
+        position: absolute;
+        left: 96px;
+        top: 44px;
+        width: 150px;
+        height: 70px;
+        translate: -50% -50%;
+        background: radial-gradient(50% 50% at 50% 50%, rgb(255 110 203 / 0.3), rgb(255 110 203 / 0) 70%);
+      }
+      .sky {
+        position: absolute;
+        left: 96px;
+        top: 0;
+        width: 90px;
+        height: 44px;
+        translate: -50% 0;
+        overflow: hidden;
+        -webkit-box-reflect: below 1px linear-gradient(transparent 60%, rgba(0, 0, 0, 0.4));
+      }
+      .sun {
+        position: absolute;
+        left: 50%;
+        bottom: 5px;
+        width: 36px;
+        height: 36px;
+        margin-left: -18px;
+        border-radius: 50%;
+        background: radial-gradient(
+          circle at 50% 30%,
+          #fffafd 0%,
+          color-mix(in srgb, rgb(255 190 232) 60%, white) 38%,
+          color-mix(in srgb, #ff6ecb 60%, white) 72%,
+          #ff6ecb 100%
+        );
+        box-shadow: 0 0 12px 2px rgb(255 110 203 / 0.55);
+      }
+      .mark {
+        position: absolute;
+        left: 50%;
+        bottom: -2px;
+        width: 31px;
+        margin-left: -15.5px;
+        filter: drop-shadow(0 0 5px rgb(255 110 203 / 0.6));
+      }
+      .horizon {
+        position: absolute;
+        left: 40px;
+        right: 4px;
+        top: 44px;
+        height: 1px;
+        background: linear-gradient(
+          90deg,
+          transparent 0%,
+          rgb(255 190 232 / 0.55) 30%,
+          color-mix(in srgb, rgb(255 190 232) 55%, white 45%) 55%,
+          rgb(255 190 232 / 0.55) 75%,
+          transparent 100%
+        );
+        box-shadow: 0 0 6px rgb(255 110 203 / 0.6);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="glow"></div>
+    <div class="sky">
+      <div class="sun"></div>
+      <img class="mark" src="../../src/renderer/src/assets/vitra-logo.png" alt="" />
+    </div>
+    <div class="horizon"></div>
+  </body>
+</html>
