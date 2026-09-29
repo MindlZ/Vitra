@@ -5,8 +5,8 @@
 <h1 align="center">Vitra</h1>
 
 <p align="center">
-  One library for all your PC games.<br />
-  Steam, Epic, GOG, Xbox and anything else you play, in one quiet place.
+  A game launcher for Windows.<br />
+  Steam, Epic, GOG, Xbox and your own games in one library.
 </p>
 
 <p align="center">
@@ -45,52 +45,48 @@
   - [Captures](#captures)
   - [Big picture and controllers](#big-picture-and-controllers)
   - [Starting with Windows](#starting-with-windows)
-- [About me](#about-me)
-- [A personal project](#a-personal-project)
-- [A word of caution about forks](#a-word-of-caution-about-forks)
+- [Maintenance](#maintenance)
+- [Forks and security](#forks-and-security)
 - [Building from source](#building-from-source)
+- [Author](#author)
 - [Licence](#licence)
 
 ## About
 
-Vitra is a game launcher for Windows. It finds the games you already have,
-installed or not, across every store on your PC, and puts them in one library.
-It keeps track of how long you play, shows which friends are online, and has a
-fullscreen big picture mode for playing on a TV with a controller.
+Vitra builds one library from every store on your PC, installed or owned. It
+tracks playtime, shows which friends are online, and has a fullscreen big
+picture mode for the TV.
 
-It reads the files your launchers already keep on disk. There are no accounts
-to make and nothing to sign in to. Steam, Epic, GOG and Xbox still launch your
-games, so ownership, cloud saves and anti-cheat work exactly as they normally do.
+It reads the files your launchers already keep. No accounts, no sign-in. Games
+still launch through their own store, so ownership, cloud saves and anti-cheat
+are untouched.
 
 ## Features
 
-### Every store, one library
+### One library
 
-Installed and owned Steam games, your non-Steam shortcuts, Epic, GOG, Xbox /
-Game Pass, and any `.exe` you add yourself, all in one grid. Games you own but
-haven't installed are there too, ready to install. Cover art comes in
-automatically, and you can sort, search, favourite and tag everything.
+Steam, non-Steam shortcuts, Epic, GOG, Xbox / Game Pass and any `.exe`, in one
+grid. Owned games that aren't installed appear alongside, ready to install.
+Cover art is fetched automatically. Sort, search, favourite and tag anything.
 
 <p align="center">
   <img src="docs/images/library.jpg" alt="The library" width="900" />
 </p>
 
-### A page for every game
+### Game pages
 
-Every game gets its own page with its artwork, how long you've played, when
-you last played it, and your screenshots and clips from Steam and the Xbox Game
-Bar. Playtime is tracked for every game, even ones Steam never counted, and
-your existing Steam hours are imported when you first open Vitra.
+Artwork, time played, last played, and your Steam and Xbox Game Bar captures
+for every game. Playtime is tracked for all of them, including games Steam
+never counted. Existing Steam hours are imported on first run.
 
 <p align="center">
   <img src="docs/images/game.jpg" alt="A game's page" width="900" />
 </p>
 
-### A home screen worth leaving open
+### Home
 
-A clock, whatever's playing on your PC with a visualiser that moves to it, the
-game you were last playing, and which friends are online. Leave it long enough
-and it turns into a screen saver.
+A clock, a visualiser driven by whatever your PC is playing, the last game you
+played, and friends online. Left alone, it becomes a screen saver.
 
 <p align="center">
   <img src="docs/images/home-moon.jpg" alt="The home screen" width="900" />
@@ -98,42 +94,37 @@ and it turns into a screen saver.
 
 ### Big picture mode
 
-A fullscreen, controller-first view for playing on the TV. Browse your
-library from the couch, launch games, and sleep, restart or shut down the PC
-without getting up.
+Fullscreen and built for a controller. Browse, launch, and sleep, restart or
+shut down the PC from the couch.
 
 <p align="center">
   <img src="docs/images/big-picture.jpg" alt="Big picture mode" width="900" />
 </p>
 
-Its home screen comes with you, too.
-
 <p align="center">
   <img src="docs/images/big-picture-home.jpg" alt="Big picture home" width="900" />
 </p>
 
-### Make it yours
+### Wallpapers and themes
 
-Four wallpapers to choose from, or use any image of your own. Vitra takes its
-colours from whichever you pick.
+Four built-in wallpapers, or any image of your own. The interface takes its
+colours from the wallpaper and switches between light and dark to match.
 
 <p align="center">
   <img src="docs/images/settings.jpg" alt="Choosing a wallpaper in Settings" width="900" />
 </p>
 
-Light wallpapers get a light look, and dark ones a dark look, automatically.
-
 <p align="center">
-  <img src="docs/images/home-smoke.jpg" alt="The light look" width="900" />
+  <img src="docs/images/home-smoke.jpg" alt="The light theme" width="900" />
 </p>
 
-### And also
+### Also
 
-- **Controller support** everywhere, not just in big picture.
-- **Discord status** that shows the game you're playing.
-- **A Programs tab** for apps like Wallpaper Engine, kept apart from your games.
-- **Runs in the tray** so playtime keeps tracking, and can start with Windows.
-- **Automatic updates** from this repository's releases.
+- Controller support throughout
+- Discord Rich Presence
+- A separate Programs tab for apps like Wallpaper Engine
+- Tray mode and start with Windows
+- Automatic updates
 
 ## Getting started
 
@@ -141,147 +132,120 @@ Light wallpapers get a light look, and dark ones a dark look, automatically.
 
 1. Download `Vitra-Setup-<version>.exe` from the
    [latest release](https://github.com/MindlZ/Vitra/releases/latest).
-2. Run it. Windows SmartScreen may warn you because the installer isn't
-   code-signed (certificates cost money this project doesn't have). Click
+2. Run it. The installer isn't code-signed, so SmartScreen may show a warning:
    **More info → Run anyway**.
-3. Choose where to install and whether it's just for you or everyone on the PC.
+3. Choose the install folder and whether to install for yourself or everyone.
 
-Vitra scans your stores the first time it opens. Everything works without any
-of the optional setup below.
+Vitra scans your stores on first launch. Everything below is optional.
 
 ### API keys (optional)
 
-Two free API keys unlock extras. Both go in **Settings → Connections**.
+Two free keys enable extra features. Both are entered in **Settings →
+Connections**, encrypted with your Windows account, and only ever sent to
+their own service.
 
-| Key | What it adds | Where to get it |
+| Key | Enables | Get it from |
 | --- | --- | --- |
-| Steam Web API key | See which Steam friends are online and what they're playing | [steamcommunity.com/dev/apikey](https://steamcommunity.com/dev/apikey) |
-| SteamGridDB API key | Cover art for Epic, GOG, Xbox, non-Steam and your own games | [steamgriddb.com](https://www.steamgriddb.com/profile/preferences/api) |
-
-Keys are encrypted with your Windows account before they're saved, and each is
-only ever sent to the service it belongs to.
+| Steam Web API key | Online friends and what they're playing | [steamcommunity.com/dev/apikey](https://steamcommunity.com/dev/apikey) |
+| SteamGridDB API key | Cover art for non-Steam games | [steamgriddb.com](https://www.steamgriddb.com/profile/preferences/api) |
 
 #### Steam Web API key
 
-1. Go to [steamcommunity.com/dev/apikey](https://steamcommunity.com/dev/apikey)
-   and sign in with Steam.
-2. Enter any domain name (`localhost` is fine), accept the terms and click
-   **Register**.
-3. Copy the key it shows you.
-4. In Vitra, open **Settings → Connections** and paste it into **Steam Web API key**.
-5. Make your **friends list** public, or Steam won't share it: Steam → your
-   profile → **Edit Profile → Privacy Settings → Friends List: Public**.
+1. Open [steamcommunity.com/dev/apikey](https://steamcommunity.com/dev/apikey)
+   and sign in.
+2. Enter any domain (`localhost` works), accept the terms and click **Register**.
+3. Paste the key into **Settings → Connections → Steam Web API key**.
+4. Set your friends list to public: **Steam profile → Edit Profile → Privacy
+   Settings → Friends List: Public**.
 
 #### SteamGridDB API key
 
-Steam games already get their art automatically; this fills in everything else.
-
-1. Sign in at [steamgriddb.com](https://www.steamgriddb.com) (you can use your
-   Steam account).
+1. Sign in at [steamgriddb.com](https://www.steamgriddb.com).
 2. Open [Preferences → API](https://www.steamgriddb.com/profile/preferences/api)
    and click **Generate API Key**.
-3. Copy the key and paste it into **Settings → Connections → SteamGridDB key**.
-4. Restart Vitra (quit from the tray icon and open it again) to fetch the
-   missing art.
+3. Paste the key into **Settings → Connections → SteamGridDB key**.
+4. Restart Vitra to fetch the missing art.
 
-You can also set any image as a game's cover or background from its page.
+Any game's cover and background can also be set by hand from its page.
 
 ### Discord status (optional)
 
-1. Turn on **Settings → Connections → Show what you're playing**.
-2. Make sure the **Discord desktop app** is running (the browser version can't
-   receive it).
-3. In Discord, open **User Settings → Activity Privacy** and turn on **Share
-   your detected activities with others**.
+1. Enable **Settings → Connections → Show what you're playing**.
+2. Run the Discord desktop app.
+3. In Discord, enable **User Settings → Activity Privacy → Share your detected
+   activities with others**.
 
-Your status then shows the game while it's running, if you launched it from
-Vitra.
+Games launched from Vitra then appear on your Discord profile.
 
 ### Captures
 
-Nothing to set up. Screenshots you take with Steam (**F12**) or the Xbox Game
-Bar (**Win + Alt + PrtScn**, or clips with **Win + Alt + G**) appear on that
-game's page.
+No setup. Screenshots from Steam (**F12**) and the Xbox Game Bar
+(**Win + Alt + PrtScn**, clips with **Win + Alt + G**) appear on each game's page.
 
 ### Big picture and controllers
 
-Open big picture with the **TV button** in the title bar, **F11**, or the
-**View** button on your controller. It can also start that way: **Settings →
-General → Start in big picture**.
+Open with the **TV button** in the title bar, **F11**, or **View** on a
+controller. To launch straight into it: **Settings → General → Start in big
+picture**.
 
-| Button | Does |
-| ------ | ---- |
+| Button | Action |
+| ------ | ------ |
 | A | Play / select |
 | B | Back |
-| X | Game details |
+| X | Details |
 | Y | Favourite |
 | LB / RB | Switch tabs |
 | Menu | Settings |
-| View | Leave big picture |
+| View | Exit big picture |
 
-Xbox controllers work out of the box. The Xbox button itself is reserved by
-Windows for the Game Bar.
+Xbox controllers work out of the box.
 
 ### Starting with Windows
 
-**Settings → General → Start with Windows** starts Vitra quietly in the tray
-when you sign in. Closing the window keeps it in the tray so playtime keeps
-tracking; quit from the tray icon.
+**Settings → General → Start with Windows** launches Vitra to the tray at
+sign-in. Closing the window keeps it in the tray, so playtime keeps tracking.
+Quit from the tray icon.
 
-## About me
+## Maintenance
 
-<img src="docs/images/mindlz.jpg" alt="MindlZ" width="96" align="left" />
+Vitra is developed in my spare time. Issues and feature requests are read, but
+responses and fixes aren't on a schedule. Pull requests are welcome.
 
-Hi, I'm **MindlZ**. Vitra started as the launcher I wanted for my own PC: every
-game in one place, and nice to look at while it's doing it. I'm sharing it in
-case it's what you were after too.
+## Forks and security
 
-If Vitra has earned a spot on your PC, you can
-[buy me a coffee on Ko-fi](https://ko-fi.com/mindlz). It's never expected, but
-always appreciated.
+Vitra is open source, so anyone can publish a modified version. A launcher has
+access to your game library and runs programs on your PC, which makes it an
+easy target for bundled trackers or malware.
 
-<br clear="left" />
-
-## A personal project
-
-Vitra is something I build in my spare time, for myself first and for anyone
-else who finds it useful. Updates and bug fixes happen when I have the time
-for them, so please don't expect quick replies to issues or feature requests.
-I do read them, and good bug reports are always appreciated.
-
-It's released under the [GNU General Public License v3.0](LICENSE). That means
-it's free and open source, and anyone can use, study, change and share it. If
-you fork it and release your own version, it has to stay open source under the
-same licence, with its source code available. Contributions are welcome, here
-or in your own fork.
-
-## A word of caution about forks
-
-Because Vitra is open source, anyone can take the code, change it and publish
-their own version. Most people who do that mean well, but not all of them.
-
-A launcher sees your whole game library and runs programs on your PC, which
-makes a tampered copy an easy way to slip in trackers or malware. Be careful:
-
-- Get Vitra from **[this repository's releases](https://github.com/MindlZ/Vitra/releases)**.
-- Don't install a fork or a re-upload you found somewhere else unless you trust
-  who made it and can see its source.
-- Be wary of any "Vitra" that asks you to sign in to an account, asks for
-  passwords, or comes bundled with other software. This one never does.
+- Download Vitra only from [this repository's releases](https://github.com/MindlZ/Vitra/releases).
+- Only use a fork if you trust its author and can read its source.
+- Vitra never asks for an account, a password, or to install other software.
+  Treat any copy that does as unsafe.
 
 ## Building from source
 
-You'll need [Node.js](https://nodejs.org) 22 or newer, on Windows.
+Requires [Node.js](https://nodejs.org) 22+ on Windows.
 
 ```bash
 npm install
-npm run dev    # run it with hot reload
+npm run dev    # run with hot reload
 npm run dist   # build the installer into dist/
 ```
 
-Updates only work in the installed app, not when running from source.
-Publishing a release is covered in [How it works](docs/how-it-works.md#updates-and-releases).
+Updates only work in the installed app. Release steps are in
+[How it works](docs/how-it-works.md#updates-and-releases).
+
+## Author
+
+<img src="docs/images/mindlz.jpg" alt="MindlZ" width="80" align="left" />
+
+Built by **MindlZ**. If Vitra is useful to you, you can support it on
+[Ko-fi](https://ko-fi.com/mindlz).
+
+<br clear="left" />
 
 ## Licence
 
-Vitra is made by MindlZ and released under the [GNU General Public License v3.0](LICENSE).
+[GNU General Public License v3.0](LICENSE). Vitra is free to use, study, change
+and share. Distributed modifications must stay open source under the same
+licence.
