@@ -11,7 +11,6 @@
 
 <p align="center">
   <a href="https://github.com/MindlZ/Vitra/releases/latest"><img src="https://img.shields.io/github/v/release/MindlZ/Vitra?style=flat-square&color=ff894f&label=version" alt="Latest version" /></a>
-  <a href="https://github.com/MindlZ/Vitra/releases"><img src="https://img.shields.io/github/downloads/MindlZ/Vitra/total?style=flat-square&color=ff894f" alt="Downloads" /></a>
   <img src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-2b2233?style=flat-square" alt="Windows 10 and 11" />
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-2b2233?style=flat-square" alt="GPL-3.0" /></a>
 </p>
@@ -34,9 +33,18 @@
 
 ---
 
+## About
+
+Vitra builds one library from every store on your PC, installed or owned. It
+tracks playtime, shows which friends are online, and has a fullscreen big
+picture mode for the TV.
+
+It reads the files your launchers already keep. No accounts, no sign-in. Games
+still launch through their own store, so ownership, cloud saves and anti-cheat
+are untouched.
+
 ## Contents
 
-- [About](#about)
 - [Features](#features)
 - [Getting started](#getting-started)
   - [Install](#install)
@@ -50,16 +58,6 @@
 - [Building from source](#building-from-source)
 - [Author](#author)
 - [Licence](#licence)
-
-## About
-
-Vitra builds one library from every store on your PC, installed or owned. It
-tracks playtime, shows which friends are online, and has a fullscreen big
-picture mode for the TV.
-
-It reads the files your launchers already keep. No accounts, no sign-in. Games
-still launch through their own store, so ownership, cloud saves and anti-cheat
-are untouched.
 
 ## Features
 
@@ -101,18 +99,10 @@ shut down the PC from the couch.
   <img src="docs/images/big-picture.jpg" alt="Big picture mode" width="900" />
 </p>
 
-<p align="center">
-  <img src="docs/images/big-picture-home.jpg" alt="Big picture home" width="900" />
-</p>
-
 ### Wallpapers and themes
 
 Four built-in wallpapers, or any image of your own. The interface takes its
 colours from the wallpaper and switches between light and dark to match.
-
-<p align="center">
-  <img src="docs/images/settings.jpg" alt="Choosing a wallpaper in Settings" width="900" />
-</p>
 
 <p align="center">
   <img src="docs/images/home-smoke.jpg" alt="The light theme" width="900" />
