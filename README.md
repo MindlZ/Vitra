@@ -28,7 +28,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/home.jpg" alt="Vitra's home screen" width="900" />
+  <img src="docs/images/boot.gif" alt="Vitra starting up" width="900" />
 </p>
 
 ---
@@ -68,7 +68,7 @@ grid. Owned games that aren't installed appear alongside, ready to install.
 Cover art is fetched automatically. Sort, search, favourite and tag anything.
 
 <p align="center">
-  <img src="docs/images/library.jpg" alt="The library" width="900" />
+  <img src="docs/images/library.gif" alt="The library" width="900" />
 </p>
 
 ### Game pages
@@ -96,7 +96,7 @@ Fullscreen and built for a controller. Browse, launch, and sleep, restart or
 shut down the PC from the couch.
 
 <p align="center">
-  <img src="docs/images/big-picture.jpg" alt="Big picture mode" width="900" />
+  <img src="docs/images/big-picture.gif" alt="Big picture mode" width="900" />
 </p>
 
 ### Wallpapers and themes
