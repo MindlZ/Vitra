@@ -34,6 +34,23 @@
 
 ---
 
+## Contents
+
+- [About](#about)
+- [Features](#features)
+- [Getting started](#getting-started)
+  - [Install](#install)
+  - [API keys](#api-keys-optional)
+  - [Discord status](#discord-status-optional)
+  - [Captures](#captures)
+  - [Big picture and controllers](#big-picture-and-controllers)
+  - [Starting with Windows](#starting-with-windows)
+- [About me](#about-me)
+- [A personal project](#a-personal-project)
+- [A word of caution about forks](#a-word-of-caution-about-forks)
+- [Building from source](#building-from-source)
+- [Licence](#licence)
+
 ## About
 
 Vitra is a game launcher for Windows. It finds the games you already have,
