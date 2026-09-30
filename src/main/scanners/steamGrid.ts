@@ -2,15 +2,7 @@ import { promises as fs } from 'fs'
 import { join } from 'path'
 import { findSteamPath } from '../paths'
 
-/**
- * Art the user has already customised inside Steam itself, kept in
- * userdata/<account>/config/grid. This covers both Steam games with replaced
- * artwork and non-Steam shortcuts, which have no CDN art at all — so it ranks
- * above every network source.
- *
- * Steam's naming: <appid>p.* is the portrait capsule, <appid>_hero.* the
- * background, <appid>_logo.* the logo and <appid>.* the wide capsule.
- */
+// userdata/<acct>/config/grid: <id>p portrait, <id>_hero, <id>_logo, <id> wide capsule
 const SUFFIXES: Record<'cover' | 'hero' | 'logo', string[]> = {
   cover: ['p', ''],
   hero: ['_hero'],
@@ -19,7 +11,6 @@ const SUFFIXES: Record<'cover' | 'hero' | 'logo', string[]> = {
 
 const EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp']
 
-/** Cached: this is consulted once per game per art kind. */
 let cachedDirs: { key: string; dirs: string[] } | undefined
 
 export function clearGridDirCache(): void {
@@ -55,13 +46,12 @@ async function locateGridDirs(steamPathOverride?: string): Promise<string[]> {
       await fs.access(dir)
       dirs.push(dir)
     } catch {
-      // Account has never had custom art set.
+      // never had custom art
     }
   }
   return dirs
 }
 
-/** Absolute path to locally stored Steam art for this app id, if any exists. */
 export async function findLocalGridArt(
   appId: string,
   kind: 'cover' | 'hero' | 'logo',
@@ -75,7 +65,7 @@ export async function findLocalGridArt(
           await fs.access(candidate)
           return candidate
         } catch {
-          // Next combination.
+          // try the next one
         }
       }
     }

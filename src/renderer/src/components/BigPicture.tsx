@@ -12,6 +12,7 @@ import {
   Download,
   Info,
   LogOut,
+  Menu as MenuIcon,
   Minimize2,
   Moon,
   Play,
@@ -20,12 +21,20 @@ import {
   Settings as SettingsIcon,
   Star
 } from 'lucide-react'
-import type { Appearance, Game, ProgramsView, RunningState } from '@shared/types'
+import {
+  GAME_SOURCES,
+  type Appearance,
+  type Game,
+  type GameSource,
+  type ProgramsView,
+  type RunningState
+} from '@shared/types'
 import logo from '../assets/vitra-logo.png'
 import { useArt } from '../lib/art'
 import {
   formatLastPlayed,
   formatPlaytime,
+  hasSource,
   hueFor,
   inLibrary,
   isSoftware,
@@ -38,19 +47,10 @@ import CoverImage from './CoverImage'
 import CoverReflection from './CoverReflection'
 import { Clock, Friends, lastPlayedPhrase, useMinute } from './Home'
 import NowPlaying from './NowPlaying'
+import StoreLogo, { type StoreLogoKind } from './StoreLogo'
 import Visualiser from './Visualiser'
 
-/*
- * Big picture mode: the launcher for a TV and a controller. Fullscreen, large
- * type, and one horizontal shelf of covers standing on the waterline, with
- * the focused game's art filling the screen behind it.
- *
- * It's a modal layer over the desktop UI (aria-modal scopes the controller to
- * it), built from the same parts: Home's clock, visualiser, Now playing and
- * friends; CoverImage and CoverReflection; the wallpaper and its colours.
- * Controller: d-pad/stick move, A plays, X details, Y favourite, LB/RB switch
- * tabs, B steps back, View leaves. Mouse and keyboard work throughout.
- */
+// A plays, X details, Y favourite, LB/RB tabs, B back (never exits), View exits
 
 interface Tab {
   id: string
@@ -63,23 +63,21 @@ interface Props {
   running: RunningState[]
   programsView: ProgramsView
   backgroundDim: number
-  /** The wallpaper on screen (activeWallpaper), and its fallback. */
+  backgroundParticles: boolean
   wallpaper: ActiveWallpaper
-  /** The app's appearance; big picture uses it on Home only. */
+  // used on Home only; the library tabs sit over game art and stay dark
   appearance: Appearance
-  /** A dialog is open above (Settings): leave Escape to it. */
+  // Settings is open above: leave Escape to it
   suspended: boolean
   onPlay: (game: Game) => void
   onToggleFavorite: (game: Game) => void
   onOpenSettings: () => void
   onExit: () => void
-  /** App's controller B calls this; true if big picture handled it. */
+  // App's B calls this; true = handled here
   backRef: MutableRefObject<(() => boolean) | null>
 }
 
-const SOURCES = ['steam', 'epic', 'gog', 'xbox', 'manual'] as const
 
-/** Installed first, then by name: the same order as the desktop grid. */
 function byName(a: Game, b: Game): number {
   if (a.installed !== b.installed) return a.installed ? -1 : 1
   return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
@@ -93,8 +91,6 @@ function usingPad(): boolean {
   return document.documentElement.dataset.input === 'gamepad'
 }
 
-/** A face button, drawn the way the controller labels it. */
-/** A controller button, drawn as the pad draws it: dark, in either appearance. */
 function Glyph({ children, tone }: { children: ReactNode; tone?: string }) {
   return (
     <span
@@ -104,6 +100,103 @@ function Glyph({ children, tone }: { children: ReactNode; tone?: string }) {
     >
       {children}
     </span>
+  )
+}
+
+const TAB_FADE = 56
+
+// LB/RB pinned outside the scroller so they never scroll away
+function TabStrip({
+  tabs,
+  activeId,
+  onSelect
+}: {
+  tabs: Tab[]
+  activeId: string
+  onSelect: (id: string) => void
+}) {
+  const strip = useRef<HTMLElement>(null)
+  const [fade, setFade] = useState({ left: false, right: false })
+
+  const measure = (): void => {
+    const el = strip.current
+    if (!el) return
+    const left = el.scrollLeft > 1
+    const right = el.scrollLeft + el.clientWidth < el.scrollWidth - 1
+    setFade((was) => (was.left === left && was.right === right ? was : { left, right }))
+  }
+
+  useEffect(() => {
+    const el = strip.current
+    if (!el) return
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(el)
+    // native: React's onWheel is passive and can't preventDefault
+    const onWheel = (event: WheelEvent): void => {
+      if (el.scrollWidth <= el.clientWidth || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return
+      event.preventDefault()
+      el.scrollLeft += event.deltaY
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => {
+      observer.disconnect()
+      el.removeEventListener('wheel', onWheel)
+    }
+  }, [tabs.length])
+
+  // scrollTo, not scrollIntoView, which would scroll ancestors too
+  useEffect(() => {
+    const el = strip.current
+    const button = el?.querySelector<HTMLElement>(`[data-nav-view="${CSS.escape(activeId)}"]`)
+    if (!el || !button) return
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    el.scrollTo({
+      left: button.offsetLeft - el.clientWidth / 2 + button.offsetWidth / 2,
+      behavior: reduced ? 'auto' : 'smooth'
+    })
+  }, [activeId])
+
+  const edge = (on: boolean): string => (on ? `transparent 0, #000 ${TAB_FADE}px` : '#000 0')
+  const mask = `linear-gradient(to right, ${edge(fade.left)}, ${
+    fade.right ? `#000 calc(100% - ${TAB_FADE}px), transparent 100%` : '#000 100%'
+  })`
+
+  return (
+    <div className="flex min-w-0 flex-1 items-center gap-3">
+      <Glyph>LB</Glyph>
+      {/* py-3: overflow-x clips y too, and the sun marker hangs below the tab */}
+      <nav
+        ref={strip}
+        aria-label="Big picture sections"
+        onScroll={measure}
+        className="min-w-0 flex-1 overflow-x-auto py-3 [scrollbar-width:none]"
+        style={{ maskImage: mask, WebkitMaskImage: mask }}
+      >
+        <div className="flex w-max items-center gap-1.5 px-2">
+          {tabs.map((entry) => {
+            const active = entry.id === activeId
+            return (
+              <button
+                key={entry.id}
+                onClick={() => onSelect(entry.id)}
+                data-nav-view={entry.id}
+                aria-current={active ? 'page' : undefined}
+                className={`relative h-11 shrink-0 rounded-full px-4 text-[clamp(15px,1.25vw,19px)] transition-colors ${
+                  active ? 'bg-white/10 text-ink' : 'text-dim hover:bg-white/6 hover:text-ink'
+                }`}
+              >
+                {entry.label}
+                {active && (
+                  <span className="vitra-sun absolute -bottom-2 left-1/2 h-[6px] w-[6px] -translate-x-1/2" />
+                )}
+              </button>
+            )
+          })}
+        </div>
+      </nav>
+      <Glyph>RB</Glyph>
+    </div>
   )
 }
 
@@ -131,13 +224,58 @@ const BUMPERS = (
   </span>
 )
 const VIEW = <Glyph>View</Glyph>
+const TRIGGERS = (
+  <span className="flex gap-1">
+    <Glyph>LT</Glyph>
+    <Glyph>RT</Glyph>
+  </span>
+)
 
-/**
- * The focused game's hero art, full-bleed. Each image fades in over the last;
- * layers remember which game they belong to, so a game without a hero (or
- * one still loading) fades back to the wallpaper rather than keeping the
- * previous game's art behind it.
- */
+// Library's store filter. stepped by LT/RT (data-nav-subview), so it's never a d-pad stop
+function StoreRow({
+  stores,
+  active,
+  onSelect
+}: {
+  stores: GameSource[]
+  active: GameSource | 'all'
+  onSelect: (store: GameSource | 'all') => void
+}) {
+  const entries: Array<GameSource | 'all'> = ['all', ...stores]
+  return (
+    <div className="relative flex shrink-0 items-center gap-3 px-14 pb-2">
+      <Glyph>LT</Glyph>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {entries.map((store) => {
+          const current = store === active
+          const label = store === 'all' ? 'All' : store === 'manual' ? 'Local' : sourceLabel(store)
+          const logo = store === 'all' || store === 'manual' ? undefined : (store as StoreLogoKind)
+          return (
+            <button
+              key={store}
+              onClick={() => onSelect(store)}
+              data-nav-subview={store}
+              data-nav-skip
+              tabIndex={-1}
+              aria-current={current ? 'page' : undefined}
+              aria-label={label}
+              title={label}
+              className={`flex h-9 items-center justify-center rounded-full px-3.5 text-[14px] transition-colors ${
+                current ? 'bg-white/12 text-ink' : 'text-muted hover:bg-white/6 hover:text-ink'
+              }`}
+            >
+              {logo ? <StoreLogo kind={logo} className="h-[18px] w-[18px]" /> : label}
+            </button>
+          )
+        })}
+      </div>
+      <Glyph>RT</Glyph>
+    </div>
+  )
+}
+
+// layers are tagged by game so one without a hero fades to the wallpaper instead
+// of keeping the previous game's art
 function HeroBackdrop({ gameId }: { gameId: string }) {
   const url = useArt(gameId, 'hero')
   const [layers, setLayers] = useState<Array<{ id: string; src: string }>>([])
@@ -165,7 +303,6 @@ function HeroBackdrop({ gameId }: { gameId: string }) {
   )
 }
 
-/** Veils that keep the title, tabs and shelf readable over any artwork. */
 function Veils() {
   return (
     <>
@@ -206,9 +343,7 @@ function ShelfItem({
         data-nav-default={isDefault || undefined}
         aria-label={`${game.name}${game.installed ? '' : ', not installed'}${running ? ', playing' : ''}`}
         onFocus={onSelect}
-        // A controller's A and the keyboard's Enter arrive as detail 0: play.
-        // A mouse click only selects, so the background can be browsed
-        // without launching anything; double-click plays.
+        // detail 0 = pad A / Enter: play. a mouse click only selects
         onClick={(event) => (event.detail === 0 ? onPlay() : onSelect())}
         onDoubleClick={onPlay}
         className="vitra-bp-cover relative overflow-hidden rounded-[12px] bg-raised"
@@ -227,7 +362,7 @@ function ShelfItem({
         )}
       </button>
       <CoverReflection game={game} className="mt-[6px]" />
-      {/* Reached by the controller's X and Y (lib/gamepad.ts), never a stop. */}
+      {/* pad X / Y only */}
       <button data-nav-skip data-nav-x tabIndex={-1} onClick={onDetails} className="sr-only">
         Details
       </button>
@@ -238,10 +373,6 @@ function ShelfItem({
   )
 }
 
-/**
- * One row of covers on the waterline. The focused cover lifts, glows and its
- * reflection follows; the scroller keeps it centred (data-nav-center).
- */
 function Shelf({
   games,
   activeId,
@@ -261,7 +392,6 @@ function Shelf({
 }) {
   const scroller = useRef<HTMLDivElement>(null)
 
-  // Arrow keys walk the shelf for keyboard users; the pad has its own nav.
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
     if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
     const covers = [...(scroller.current?.querySelectorAll<HTMLElement>('[data-nav-primary]') ?? [])]
@@ -280,7 +410,6 @@ function Shelf({
         ref={scroller}
         data-nav-center
         onKeyDown={onKeyDown}
-        // A mouse wheel scrolls the shelf sideways.
         onWheel={(event) => {
           if (scroller.current && Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
             scroller.current.scrollLeft += event.deltaY
@@ -308,7 +437,6 @@ function Shelf({
   )
 }
 
-/** Name, store and time played, large enough to read across a room. */
 function GameInfo({
   game,
   running,
@@ -347,7 +475,7 @@ function GameInfo({
         {game.playtimeSeconds > 0 ? `${formatPlaytime(game.playtimeSeconds)} played` : 'Never played'}
         {game.lastPlayed ? ` · ${lastPlayedPhrase(game.lastPlayed)}` : ''}
       </div>
-      {/* For the mouse; the controller uses A and X on the cover itself. */}
+      {/* mouse only; the pad uses A / X on the cover */}
       <div className="mt-6 flex items-center gap-3">
         <button
           data-nav-skip
@@ -371,11 +499,6 @@ function GameInfo({
   )
 }
 
-/**
- * Home's one game to pick back up, at TV size: the desktop Continue card's
- * idea (hero strip, name, when you last played) with a ghost Play that only
- * lights up on focus or hover. A plays it; X opens its page.
- */
 function ContinueTile({
   game,
   running,
@@ -396,7 +519,6 @@ function ContinueTile({
       <button
         data-nav-primary
         data-nav-default
-        // Already running: there's nothing to launch, so show its page.
         onClick={running ? onDetails : onPlay}
         aria-label={`${action} ${game.name}`}
         className="group flex max-w-[46vw] items-center gap-5 rounded-[16px] p-2.5 pr-4 text-left transition-colors hover:bg-white/6 focus-visible:bg-white/8 focus-visible:outline-none"
@@ -454,8 +576,7 @@ function Stat({ label, value }: { label: string; value: string }) {
   )
 }
 
-/** A game's page at TV scale: art, stats, and the three things you'd do. */
-/** Seconds to back out of a restart or shutdown. Sleep and quit act at once. */
+// seconds; sleep and quit don't count down
 const POWER_COUNTDOWN = 5
 
 const POWER_WORDS: Record<'restart' | 'shutdown', { doing: string; now: string }> = {
@@ -486,29 +607,25 @@ function PowerRow({
   )
 }
 
-/**
- * The power menu, like a console's: sleep, restart or shut down the PC,
- * leave big picture, or quit Vitra. Restart and shut down count down first
- * (B or Cancel backs out), so one stray A can't turn the PC off. B steps
- * back through it via big picture's own back(): countdown, then menu.
- */
+// restart/shutdown count down so one stray A can't power the PC off
 function PowerMenu({
   pending,
   onPending,
   onClose,
-  onExit
+  onExit,
+  onOpenSettings
 }: {
   pending: 'restart' | 'shutdown' | null
   onPending: (action: 'restart' | 'shutdown' | null) => void
   onClose: () => void
   onExit: () => void
+  onOpenSettings: () => void
 }) {
   const root = useRef<HTMLDivElement>(null)
   const [left, setLeft] = useState(POWER_COUNTDOWN)
   const [sent, setSent] = useState(false)
 
-  // Land on the first row when the menu opens, and on Cancel when a
-  // countdown starts, so a second A doesn't confirm by accident.
+  // focus Cancel on a countdown so a second A doesn't confirm
   useEffect(() => {
     root.current
       ?.querySelector<HTMLElement>('[data-nav-default]')
@@ -578,9 +695,19 @@ function PowerMenu({
       ) : (
         <div className="glass-strong w-[min(460px,90vw)] rounded-[22px] p-3">
           <div className="px-5 pt-3 pb-2 font-display text-[22px] font-bold text-ink [font-stretch:85%]">
-            Power
+            Menu
           </div>
-          <PowerRow icon={Moon} label="Sleep" onClick={() => act('sleep')} first />
+          <PowerRow
+            icon={SettingsIcon}
+            label="Settings"
+            first
+            onClick={() => {
+              onClose()
+              onOpenSettings()
+            }}
+          />
+          <div className="mx-5 my-2 h-px bg-white/10" />
+          <PowerRow icon={Moon} label="Sleep" onClick={() => act('sleep')} />
           <PowerRow icon={RotateCcw} label="Restart" onClick={() => onPending('restart')} />
           <PowerRow icon={Power} label="Shut down" onClick={() => onPending('shutdown')} />
           <div className="mx-5 my-2 h-px bg-white/10" />
@@ -622,7 +749,6 @@ function Detail({
 }) {
   const play = useRef<HTMLButtonElement>(null)
 
-  // Land on Play, so A plays straight away.
   useEffect(() => {
     play.current?.focus({ preventScroll: true, focusVisible: usingPad() } as FocusOptions)
   }, [])
@@ -650,8 +776,7 @@ function Detail({
           <CoverReflection game={game} className="mt-[6px]" />
         </div>
 
-        {/* Lifted by the reflection's height (30% of the cover's width, plus
-            its gap), so the text's foot lines up with the cover's. */}
+        {/* pb = reflection height (0.3 x cover width + gap): text foot meets cover foot */}
         <div className="min-w-0 flex-1 pb-[calc(clamp(200px,19vw,330px)*0.3_+_6px)]">
           <div className="mb-3 text-[15px] text-dim">
             {sourceLabel(game.source)}
@@ -718,6 +843,7 @@ export default function BigPicture({
   running,
   programsView,
   backgroundDim,
+  backgroundParticles,
   wallpaper,
   appearance,
   suspended,
@@ -729,6 +855,7 @@ export default function BigPicture({
 }: Props) {
   const root = useRef<HTMLDivElement>(null)
   const [tabId, setTabId] = useState('home')
+  const [storeFilter, setStoreFilter] = useState<GameSource | 'all'>('all')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [detailId, setDetailId] = useState<string | null>(null)
   const [powerOpen, setPowerOpen] = useState(false)
@@ -736,7 +863,6 @@ export default function BigPicture({
 
   const runningIds = useMemo(() => new Set(running.map((state) => state.gameId)), [running])
 
-  // The same scoping rules as the desktop library (inLibrary), as tabs.
   const tabs = useMemo(() => {
     const library = games.filter((game) => inLibrary(game, programsView))
     const list: Tab[] = [{ id: 'home', label: 'Home', games: [] }]
@@ -746,26 +872,26 @@ export default function BigPicture({
     if (recent.length) list.push({ id: 'recent', label: 'Recent', games: recent })
     const favourites = library.filter((game) => game.favorite).sort(byName)
     if (favourites.length) list.push({ id: 'favorites', label: 'Favourites', games: favourites })
-    list.push({ id: 'all', label: 'All games', games: [...library].sort(byName) })
-    for (const source of SOURCES) {
-      const own = library.filter((game) => game.source === source).sort(byName)
-      if (own.length) {
-        list.push({
-          id: `source:${source}`,
-          label: source === 'manual' ? 'Local' : sourceLabel(source),
-          games: own
-        })
-      }
-    }
+    // stores are a second row inside Library (LT/RT), not tabs of their own
+    const inStore = storeFilter === 'all' ? library : library.filter((game) => hasSource(game, storeFilter))
+    list.push({ id: 'library', label: 'Library', games: [...inStore].sort(byName) })
     if (programsView === 'tab') {
       const programs = games.filter((game) => !game.hidden && isSoftware(game)).sort(byName)
       list.push({ id: 'programs', label: 'Programs', games: programs })
     }
     return list
+  }, [games, programsView, storeFilter])
+
+  const stores = useMemo(() => {
+    const library = games.filter((game) => inLibrary(game, programsView))
+    return GAME_SOURCES.filter((source) => library.some((game) => hasSource(game, source)))
   }, [games, programsView])
 
-  // Home's one game to continue: whatever's running, else the most recently
-  // played. Programs stay out, as they do from Continue playing on the desktop.
+  // a store that emptied out (or a stale pick) falls back to All
+  useEffect(() => {
+    if (storeFilter !== 'all' && !stores.includes(storeFilter)) setStoreFilter('all')
+  }, [stores, storeFilter])
+
   const featured = useMemo(() => {
     const rank = (game: Game): number => (runningIds.has(game.id) ? Infinity : (game.lastPlayed ?? 0))
     let best: Game | undefined
@@ -777,7 +903,6 @@ export default function BigPicture({
   }, [games, runningIds])
 
   const tab = tabs.find((entry) => entry.id === tabId) ?? tabs[0]
-  // Home has no shelf; the library tabs are one each.
   const shelf = tab.id === 'home' ? [] : tab.games
   const selected = shelf.find((game) => game.id === selectedId) ?? shelf[0]
   const detail = detailId ? games.find((game) => game.id === detailId) : undefined
@@ -787,8 +912,12 @@ export default function BigPicture({
     setSelectedId(null)
   }
 
-  // Switching tabs with the pad puts focus on the new tab's default (a shelf's
-  // first cover, or Home's Continue); with the mouse, focus stays put.
+  const selectStore = (store: GameSource | 'all'): void => {
+    setStoreFilter(store)
+    setSelectedId(null)
+  }
+
+  // pad only: the mouse keeps its focus where it is
   useEffect(() => {
     if (!usingPad()) return
     const frame = requestAnimationFrame(() => {
@@ -797,7 +926,7 @@ export default function BigPicture({
         ?.focus({ preventScroll: true, focusVisible: true } as FocusOptions)
     })
     return () => cancelAnimationFrame(frame)
-  }, [tab.id])
+  }, [tab.id, storeFilter])
 
   const select = (game: Game): void => {
     if (game.id === selected?.id) return
@@ -805,10 +934,9 @@ export default function BigPicture({
     playSound('card-hover', 0.22)
   }
 
-  // B, and Escape: close the page, then go back to Home. On Home it's a no-op;
-  // leaving big picture is View, F11 or the Exit button, never an accident.
+  // B never leaves big picture: only View, F11 or Exit do
   const back = (): boolean => {
-    // The power menu first: a countdown backs out to the menu, then it closes.
+    // countdown -> menu -> closed
     if (powerPending) {
       setPowerPending(null)
       return true
@@ -852,13 +980,15 @@ export default function BigPicture({
       role="dialog"
       aria-modal="true"
       aria-label="Big picture"
-      // Home shows the wallpaper, so it follows the app. The library tabs sit
-      // over game art, which stays dark whatever the wallpaper.
       data-appearance={onHome ? appearance : 'dark'}
       className="vitra-bp fixed inset-0 z-[45] flex flex-col overflow-hidden bg-base"
     >
-      {/* The wallpaper, then (off Home) the selected game's art over it. */}
-      <Backdrop dim={backgroundDim} appearance={onHome ? appearance : 'dark'} {...wallpaper} />
+      <Backdrop
+        dim={backgroundDim}
+        appearance={onHome ? appearance : 'dark'}
+        particles={backgroundParticles}
+        {...wallpaper}
+      />
       {!onHome && selected && (
         <div className="absolute inset-0 overflow-hidden">
           <HeroBackdrop gameId={selected.id} />
@@ -874,79 +1004,31 @@ export default function BigPicture({
           className="h-9 w-9 drop-shadow-[0_0_10px_rgb(var(--accent-rgb)/0.6)]"
         />
 
-        {/* Scrolls sideways if a big library has more tabs than fit; the
-            padding keeps the sun marker under the active tab unclipped. */}
-        <nav
-          aria-label="Big picture sections"
-          className="flex min-w-0 items-center gap-1.5 overflow-x-auto py-3 [scrollbar-width:none]"
-        >
-          <span className="mr-2 hidden xl:inline-flex">
-            <Glyph>LB</Glyph>
-          </span>
-          {tabs.map((entry) => {
-            const active = entry.id === tab.id
-            return (
-              <button
-                key={entry.id}
-                onClick={() => selectTab(entry.id)}
-                data-nav-view={entry.id}
-                aria-current={active ? 'page' : undefined}
-                className={`relative h-11 shrink-0 rounded-full px-4 text-[clamp(15px,1.25vw,19px)] transition-colors ${
-                  active ? 'bg-white/10 text-ink' : 'text-dim hover:bg-white/6 hover:text-ink'
-                }`}
-              >
-                {entry.label}
-                {active && (
-                  <span className="vitra-sun absolute -bottom-2 left-1/2 h-[6px] w-[6px] -translate-x-1/2" />
-                )}
-              </button>
-            )
-          })}
-          <span className="ml-2 hidden xl:inline-flex">
-            <Glyph>RB</Glyph>
-          </span>
-        </nav>
+        <TabStrip tabs={tabs} activeId={tab.id} onSelect={selectTab} />
 
-        <div className="ml-auto flex shrink-0 items-center gap-2">
-          {!onHome && (
-            <span className="mr-4">
-              <SmallClock />
-            </span>
-          )}
-          <button
-            onClick={onOpenSettings}
-            aria-label="Settings"
-            title="Settings"
-            className="flex h-11 w-11 items-center justify-center rounded-full text-dim transition-colors hover:bg-white/8 hover:text-ink"
-          >
-            <SettingsIcon className="h-5 w-5" />
-          </button>
+        <div className="ml-auto flex shrink-0 items-center gap-4">
+          {!onHome && <SmallClock />}
           <button
             onClick={() => setPowerOpen(true)}
-            aria-label="Power"
-            title="Sleep, restart, shut down"
+            aria-label="Menu"
+            title="Menu"
             className="flex h-11 w-11 items-center justify-center rounded-full text-dim transition-colors hover:bg-white/8 hover:text-ink"
           >
-            <Power className="h-5 w-5" />
-          </button>
-          <button
-            onClick={onExit}
-            title="Leave big picture (View or F11)"
-            className="flex h-11 items-center gap-2 rounded-full px-4 text-[14px] text-dim transition-colors hover:bg-white/8 hover:text-ink"
-          >
-            <Minimize2 className="h-4 w-4" />
-            Exit
+            <MenuIcon className="h-5 w-5" />
           </button>
         </div>
       </header>
+
+      {tab.id === 'library' && stores.length > 1 && (
+        <StoreRow stores={stores} active={storeFilter} onSelect={selectStore} />
+      )}
 
       {onHome ? (
         <div key="home" className="animate-fade-up relative flex min-h-0 flex-1 flex-col">
           <div className="flex min-h-0 flex-1 flex-col items-center justify-center">
             <Clock size="tv" />
             <Visualiser className="mt-[2.5vh] h-[clamp(80px,14vh,170px)] max-w-[1100px] shrink-0 [mask-image:linear-gradient(to_right,transparent,black_18%,black_82%,transparent)]" />
-            {/* Home's own Now playing, set larger for the room. The zoom sits on
-                a content-sized wrapper so the full-width row isn't scaled too. */}
+            {/* zoom on a content-sized wrapper, or the full-width row scales too */}
             <div className="flex min-h-[84px] w-full shrink-0 justify-center">
               <div className="[zoom:1.3]">
                 <NowPlaying />
@@ -954,8 +1036,6 @@ export default function BigPicture({
             </div>
           </div>
 
-          {/* A slim bottom bar, like the desktop Home: one game to continue
-              and a few friends, nothing more. The library tabs hold the rest. */}
           <div className="flex items-end justify-between gap-8 px-12 pb-2">
             {featured ? (
               <ContinueTile
@@ -966,7 +1046,7 @@ export default function BigPicture({
               />
             ) : (
               <button
-                onClick={() => selectTab('all')}
+                onClick={() => selectTab('library')}
                 data-nav-default
                 className="h-12 rounded-[12px] px-4 text-[15px] text-muted transition-colors hover:text-dim"
               >
@@ -979,7 +1059,10 @@ export default function BigPicture({
           </div>
         </div>
       ) : (
-        <div key={tab.id} className="animate-fade-up relative flex min-h-0 flex-1 flex-col justify-end">
+        <div
+          key={`${tab.id}:${storeFilter}`}
+          className="animate-fade-up relative flex min-h-0 flex-1 flex-col justify-end"
+        >
           {selected ? (
             <>
               <GameInfo
@@ -989,7 +1072,7 @@ export default function BigPicture({
                 onDetails={() => setDetailId(selected.id)}
               />
               <Shelf
-                key={tab.id}
+                key={`${tab.id}:${storeFilter}`}
                 games={shelf}
                 activeId={selected.id}
                 runningIds={runningIds}
@@ -1020,6 +1103,9 @@ export default function BigPicture({
                   [X, 'Details'],
                   [Y, 'Favourite'],
                   [BUMPERS, 'Switch'],
+                  ...(tab.id === 'library' && stores.length > 1
+                    ? [[TRIGGERS, 'Store'] as [ReactNode, string]]
+                    : []),
                   [B, 'Back']
                 ]
           }
@@ -1037,7 +1123,7 @@ export default function BigPicture({
         />
       )}
 
-      {/* Last, so it's the aria-modal the controller scopes to. */}
+      {/* last: gamepad scope() takes the last aria-modal */}
       {powerOpen && (
         <PowerMenu
           pending={powerPending}
@@ -1047,6 +1133,7 @@ export default function BigPicture({
             setPowerOpen(false)
           }}
           onExit={onExit}
+          onOpenSettings={onOpenSettings}
         />
       )}
     </div>

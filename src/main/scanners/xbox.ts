@@ -3,25 +3,12 @@ import { promises as fs } from 'fs'
 import { basename, join } from 'path'
 import type { Game } from '../../shared/types'
 
-/*
- * Xbox app / PC Game Pass games (GDK titles). The Xbox app records where it
- * installs games in a `.GamingRoot` file at the root of each drive; every game
- * folder there has Content\appxmanifest.xml (the package identity) and
- * Content\MicrosoftGame.config (display name, executables, artwork).
- *
- * Only what's installed: the owned library lives behind an Xbox Live sign-in,
- * and Vitra reads nothing that needs an account.
- *
- * These are packaged apps, so they're launched through the shell by their app
- * id (shell:AppsFolder\<PackageFamilyName>!<AppId>), never by the exe.
- */
+// GDK games: <drive>\.GamingRoot lists install folders; each game has
+// Content\appxmanifest.xml + Content\MicrosoftGame.config
 
 const DRIVES = 'CDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
 
-/**
- * `.GamingRoot`: "RGBX", a uint32 count, then that many NUL-terminated
- * UTF-16LE folder paths relative to the drive root (normally "XboxGames").
- */
+// "RGBX", u32 count, then that many \0-terminated UTF-16LE paths
 async function gamingRoots(): Promise<string[]> {
   const found = await Promise.all(
     DRIVES.map(async (drive) => {
@@ -43,11 +30,8 @@ async function gamingRoots(): Promise<string[]> {
   return found.flat()
 }
 
-/**
- * Windows' publisher id: the first 8 bytes of SHA-256 over the UTF-16LE
- * publisher string, as 13 characters of its own base32. Checked against
- * Get-AppxPackage on a real install ("CN=EEF78D1E-…" -> 2m6wzp0cmt084).
- */
+// Windows' publisher hash: sha256(utf16le publisher)[0..8] in its own base32, 13 chars.
+// checked against Get-AppxPackage ("CN=EEF78D1E-…" -> 2m6wzp0cmt084)
 function publisherId(publisher: string): string {
   const hash = createHash('sha256').update(Buffer.from(publisher, 'utf16le')).digest()
   const alphabet = '0123456789abcdefghjkmnpqrstvwxyz'
@@ -68,7 +52,6 @@ function decode(value: string): string {
     .replace(/&amp;/g, '&')
 }
 
-/** An attribute from the first tag of this name. Enough for these flat files. */
 function attr(xml: string, tag: string, name: string): string | undefined {
   const element = xml.match(new RegExp(`<${tag}\\b[^>]*>`))?.[0]
   const value = element?.match(new RegExp(`\\b${name}="([^"]*)"`))?.[1]
@@ -105,7 +88,7 @@ async function readConfig(content: string): Promise<GameConfig | undefined> {
 async function readGame(folder: string): Promise<Game | undefined> {
   const content = join(folder, 'Content')
   const manifest = await readText(join(content, 'appxmanifest.xml'))
-  // No config means it isn't a GDK game (GameSave and the like live here too).
+  // no config = not a game (GameSave etc live here too)
   const config = await readConfig(content)
   if (!manifest || !config) return undefined
 
@@ -114,7 +97,7 @@ async function readGame(folder: string): Promise<Game | undefined> {
   const appId = attr(manifest, 'Application', 'Id')
   if (!packageName || !publisher || !appId) return undefined
 
-  // The manifest's name can be a resource reference; the config's is plain.
+  // manifest name can be an ms-resource: ref
   const manifestName = manifest.match(/<DisplayName>([^<]*)<\/DisplayName>/)?.[1]
   const name =
     [manifestName && decode(manifestName), config.displayName].find(
@@ -166,10 +149,6 @@ export async function scanXbox(): Promise<{ games: Game[]; errors: string[] }> {
   return { games, errors }
 }
 
-/**
- * Artwork that ships inside the package: the splash screen is a fair hero,
- * and the square tile a last-resort cover (letterboxed, as it's square).
- */
 export async function xboxLocalArt(
   installDir: string,
   kind: 'cover' | 'hero' | 'logo'

@@ -19,7 +19,6 @@ interface EpicManifest {
   VaultThumbnailUrl?: string
 }
 
-/** One entry of the launcher's catalogue cache (catcache.bin), trimmed to what we read. */
 interface CatalogItem {
   id?: string
   namespace?: string
@@ -30,17 +29,12 @@ interface CatalogItem {
   releaseInfo?: Array<{ appId?: string; platform?: string[] }>
 }
 
-/** An owned game from the catalogue, keyed by the AppName its manifest would carry. */
 interface OwnedEntry {
   appName: string
   item: CatalogItem
 }
 
-/**
- * Epic launches through its own client so ownership/EOS auth is satisfied.
- * Format: com.epicgames.launcher://apps/<namespace>:<catalogItemId>:<appName>?action=launch
- * For a game that isn't installed, action=install opens the launcher's install dialog.
- */
+// com.epicgames.launcher://apps/<ns>:<itemId>:<appName>?action=launch|install
 function launchUri(
   namespace: string | undefined,
   itemId: string | undefined,
@@ -60,15 +54,9 @@ function image(item: CatalogItem | undefined, ...types: string[]): string | unde
   return undefined
 }
 
-/** Side builds that ship as their own app next to the real game. */
 const SIDE_BUILD = /\b(public test(ing)?|experimental|playtest|test server)\b/i
 
-/**
- * The catalogue cache holds the account's library, but also the launcher's
- * own odds and ends (Twinmotion/RealityCapture audiences, promos, add-ons).
- * A game is: filed under "games", not an add-on or audience, not DLC (which
- * names a main game), and released for Windows.
- */
+// the cache also holds audiences (Twinmotion etc), promos, add-ons. DLC names a mainGameItem
 function ownedGame(item: CatalogItem): OwnedEntry | undefined {
   const paths = (item.categories ?? []).map((category) => category.path ?? '')
   if (!paths.includes('games')) return undefined
@@ -79,7 +67,6 @@ function ownedGame(item: CatalogItem): OwnedEntry | undefined {
   return release?.appId ? { appName: release.appId, item } : undefined
 }
 
-/** Owned games by AppName. Empty if the launcher has never cached a library. */
 async function readCatalog(): Promise<Map<string, OwnedEntry>> {
   const owned = new Map<string, OwnedEntry>()
   let items: CatalogItem[]
@@ -103,7 +90,7 @@ function isGame(m: EpicManifest): boolean {
   if (!m.LaunchExecutable) return false
   const categories = m.AppCategories ?? []
   if (categories.includes('addons')) return false
-  // DLC / expansions point at a different parent app.
+  // DLC points at its parent
   if (m.MainGameAppName && m.MainGameAppName !== m.AppName) return false
   return categories.length === 0 || categories.includes('games')
 }
@@ -117,7 +104,6 @@ export async function scanEpic(): Promise<{ games: Game[]; owned: number; errors
   try {
     entries = await fs.readdir(dir)
   } catch {
-    // No manifests is fine if the catalogue still lists owned games.
     if (!catalog.size) return { games: [], owned: 0, errors: ['Epic Games Launcher not found.'] }
     entries = []
   }
@@ -137,20 +123,17 @@ export async function scanEpic(): Promise<{ games: Game[]; owned: number; errors
       seen.add(appName)
 
       const installDir = manifest.InstallLocation
-      // LaunchExecutable is forward-slashed; join() normalises it for Windows.
       const exePath =
         installDir && manifest.LaunchExecutable
           ? join(installDir, manifest.LaunchExecutable)
           : undefined
 
-      // Epic tells us exactly which processes belong to the game — use it.
       const hints = [
         manifest.MainWindowProcessName,
         ...(manifest.ProcessNames ?? []),
         manifest.LaunchExecutable?.split(/[\\/]/).pop()
       ].filter((n): n is string => Boolean(n && n.toLowerCase().endsWith('.exe')))
 
-      // The catalogue's tall box art beats the vault thumbnail when it has it.
       const listed = catalog.get(appName)?.item
       const thumbnail = manifest.VaultThumbnailUrl
       games.push({
@@ -178,8 +161,6 @@ export async function scanEpic(): Promise<{ games: Game[]; owned: number; errors
     }
   }
 
-  // Everything else in the library: owned, not on disk. Launching one opens
-  // the Epic launcher's install dialog.
   let owned = 0
   for (const { appName, item } of catalog.values()) {
     if (seen.has(appName)) continue
@@ -187,7 +168,7 @@ export async function scanEpic(): Promise<{ games: Game[]; owned: number; errors
     owned++
     games.push({
       id: `epic:${appName}`,
-      // The cache has lost some trademark signs to a literal "?" ("The Sims? 4").
+      // the cache mangles some ™ into "?" ("The Sims? 4")
       name: item.title!.replace(/(?<=\p{L})\?(?= \d)/gu, ''),
       source: 'epic',
       epicLaunchUri: launchUri(item.namespace, item.id, appName, 'install'),

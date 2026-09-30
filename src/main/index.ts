@@ -15,7 +15,10 @@ import { addManualGame, classifySoftware, scanLibrary } from './library'
 import { cancelAllTracking, launchGame, onRunningChange, runningStates, stopTracking } from './launch'
 import { discordConfigured, stopPresence, updatePresence } from './discord'
 import { clearArt, ensureArt, retryMissingArt, setLocalArt, type ArtKind } from './art'
-import { getFriends, invalidateFriends } from './friends'
+import { getFriends, invalidateFriends, joinFriend } from './friends'
+import { getSessions } from './sessions'
+import { exportBackup, importBackup } from './backup'
+import { clearAchievements, getAchievements } from './achievements'
 import { getMedia, onMediaChange, sendMediaCommand, stopMedia } from './media'
 import { backfillLightness, clearBackground, setBackground } from './background'
 import { capturePath, listCaptures, serveCapture } from './captures'
@@ -24,14 +27,22 @@ import { checkForUpdates, getUpdateState, installUpdate, scheduleUpdateChecks } 
 import { applyLoginItem, createTray, destroyTray, showWindow, startedInBackground } from './tray'
 import { clearSteamPathCache } from './paths'
 import { clearGridDirCache } from './scanners/steamGrid'
-import type { Game, MediaCommand, PowerAction, Settings, WindowAction } from '../shared/types'
+import {
+  GAME_SOURCES,
+  type Game,
+  type GameSource,
+  type MediaCommand,
+  type PowerAction,
+  type Settings,
+  type WindowAction
+} from '../shared/types'
 
 const ART_SCHEME = 'applib'
 
 protocol.registerSchemesAsPrivileged([
   {
     scheme: ART_SCHEME,
-    // stream: a capture's <video> fetches by Range, so it can seek.
+    // stream: capture <video>s seek with Range requests
     privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true }
   }
 ])
@@ -45,10 +56,6 @@ const MIME: Record<string, string> = {
   '.bmp': 'image/bmp'
 }
 
-/**
- * Serve cached art from userData over applib://art/<filename>, and game
- * captures over applib://capture/<id> (see captures.ts).
- */
 function registerArtProtocol(): void {
   protocol.handle(ART_SCHEME, async (request) => {
     try {
@@ -59,7 +66,6 @@ function registerArtProtocol(): void {
       const filename = decodeURIComponent(url.pathname.replace(/^\/+/, ''))
       const root = artDir()
       const resolved = normalize(join(root, filename))
-      // Never let a crafted path escape the art directory.
       if (!resolved.startsWith(normalize(root))) return new Response('Forbidden', { status: 403 })
 
       const data = await fs.readFile(resolved)
@@ -76,22 +82,15 @@ function registerArtProtocol(): void {
 }
 
 let mainWindow: BrowserWindow | null = null
-/** Set on a real quit (tray menu, or close with close-to-tray off). */
 let quitting = false
 
-/** Taskbar/window icon. Packaging will supply its own, so a miss isn't fatal. */
 function appIcon(): string | undefined {
   const icon = join(app.getAppPath(), 'resources', 'icon.png')
   return existsSync(icon) ? icon : undefined
 }
 
-/**
- * Home's audio visualiser listens to whatever the PC is playing. Chromium only
- * exposes system audio through getDisplayMedia, which Electron routes here:
- * answer with Windows loopback audio and a screen source (the API insists on
- * video; the renderer stops that track at once). Nothing is recorded or sent
- * anywhere — the renderer only reads frequency levels from it.
- */
+// getDisplayMedia is the only way to get system audio. The API insists on a
+// video track too; the renderer stops it straight away.
 function registerAudioCapture(): void {
   session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
     if (!request.audioRequested) {
@@ -105,11 +104,6 @@ function registerAudioCapture(): void {
   })
 }
 
-/**
- * Flags software (Wallpaper Engine, Lossless Scaling…) after a scan. Slow the
- * first time — it looks up genres on the store — so it never blocks the scan,
- * and it tells the renderer only if something actually changed.
- */
 let classifying = false
 function classifyInBackground(): void {
   if (classifying) return
@@ -131,40 +125,33 @@ function createWindow(): void {
     minWidth: 980,
     minHeight: 640,
     show: false,
-    // Starting in big picture: fullscreen from the first frame, rather than a
-    // window that jumps to fullscreen once the renderer has read settings.
     fullscreen: getSettings().bigPictureOnStart,
     icon: appIcon(),
     backgroundColor: '#0b0711',
     autoHideMenuBar: true,
-    // No native caption buttons: the title bar draws its own (TitleBar.tsx).
-    // 'hidden' still keeps the resize borders, shadow and snap-on-drag.
+    // hidden (no overlay) keeps resize borders + snap; controls are our own
     titleBarStyle: 'hidden',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
       contextIsolation: true,
       nodeIntegration: false,
-      // The startup sound plays before any click; the splash waits on it.
       autoplayPolicy: 'no-user-gesture-required'
     }
   })
 
-  // The maximise button shows restore while maximised.
   const sendMaximized = (): void => {
     mainWindow?.webContents.send('window:maximized', mainWindow.isMaximized())
   }
   mainWindow.on('maximize', sendMaximized)
   mainWindow.on('unmaximize', sendMaximized)
 
-  // Started with Windows: stay in the tray until opened. The splash and its
-  // sound wait for the window to be visible, so they play then, not now.
+  // login entry always passes --background; whether to stay hidden is decided here
   mainWindow.on('ready-to-show', () => {
-    if (!startedInBackground()) mainWindow?.show()
+    const { startInTray, bigPictureOnStart } = getSettings()
+    if (!startedInBackground() || !startInTray || bigPictureOnStart) mainWindow?.show()
   })
 
-  // Closing hides to the tray, so playtime tracking and the media bridge keep
-  // running. A real quit (tray menu) sets `quitting` first.
   mainWindow.on('close', (event) => {
     if (quitting || !getSettings().closeToTray) return
     event.preventDefault()
@@ -172,7 +159,6 @@ function createWindow(): void {
     mainWindow?.hide()
   })
 
-  // Anything that isn't our app opens in the real browser, not in-app.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:/.test(url)) void shell.openExternal(url)
     return { action: 'deny' }
@@ -186,16 +172,12 @@ function createWindow(): void {
   }
 }
 
-/**
- * Settings changes that widen what other subsystems can reach — a new key, a
- * different Steam folder — have to drop their caches, or the user would have to
- * restart before the change did anything.
- */
 function applySettings(patch: Partial<Settings>): Settings {
   setSettings(patch)
 
   if ('openAtLogin' in patch) applyLoginItem(Boolean(patch.openAtLogin))
-  if ('steamWebApiKey' in patch) invalidateFriends()
+  if ('steamWebApiKey' in patch || 'xboxApiKey' in patch) invalidateFriends()
+  if ('steamWebApiKey' in patch) clearAchievements()
   if ('discordPresence' in patch) updatePresence()
   if ('checkForUpdates' in patch) scheduleUpdateChecks()
   if ('steamGridDbKey' in patch) retryMissingArt()
@@ -205,7 +187,6 @@ function applySettings(patch: Partial<Settings>): Settings {
     retryMissingArt()
     invalidateFriends()
   }
-  // Goes back to the renderer, so keys are redacted.
   return publicSettings()
 }
 
@@ -217,13 +198,28 @@ function registerIpc(): void {
   }))
 
   ipcMain.handle('library:scan', () => {
-    // Give art that previously came back empty another go — the ladder may have
-    // gained a source (a new key) or the game may have gained local grid art.
     retryMissingArt()
     return scanLibrary().finally(classifyInBackground)
   })
 
   ipcMain.handle('friends:get', (_event, force?: boolean) => getFriends(Boolean(force)))
+  ipcMain.handle('friends:join', (_event, id: string) => joinFriend(String(id)))
+  ipcMain.handle('stats:sessions', () => getSessions())
+  ipcMain.handle('achievements:get', (_event, gameId: string) => getAchievements(String(gameId)))
+
+  ipcMain.handle('backup:export', () => exportBackup(mainWindow))
+  ipcMain.handle('backup:import', async () => {
+    const result = await importBackup(mainWindow)
+    if (result.ok) {
+      applyLoginItem(getSettings().openAtLogin)
+      scheduleUpdateChecks()
+      updatePresence()
+      invalidateFriends()
+      retryMissingArt()
+      mainWindow?.webContents.send('library:changed', null)
+    }
+    return result
+  })
 
   ipcMain.handle('media:get', () => getMedia())
   ipcMain.handle('media:command', (_event, command: MediaCommand) => sendMediaCommand(command))
@@ -234,7 +230,7 @@ function registerIpc(): void {
   ipcMain.handle('game:stop-tracking', (_event, id: string) => stopTracking(id))
 
   ipcMain.handle('game:patch', (_event, id: string, patch: Partial<Game>) => {
-    // Only user-editable fields may come from the renderer.
+    // whitelist. never exePath / launcher / companions: the renderer mustn't choose what runs
     const allowed: Partial<Game> = {}
     if (typeof patch.name === 'string' && patch.name.trim()) allowed.name = patch.name.trim()
     if (Array.isArray(patch.tags)) {
@@ -243,8 +239,9 @@ function registerIpc(): void {
     if (typeof patch.favorite === 'boolean') allowed.favorite = patch.favorite
     if (typeof patch.hidden === 'boolean') allowed.hidden = patch.hidden
     if (typeof patch.softwareOverride === 'boolean') allowed.softwareOverride = patch.softwareOverride
+    if (GAME_SOURCES.includes(patch.preferredStore as GameSource)) allowed.preferredStore = patch.preferredStore
+    if (typeof patch.closeCompanions === 'boolean') allowed.closeCompanions = patch.closeCompanions
     if (typeof patch.args === 'string') allowed.args = patch.args
-    if (typeof patch.exePath === 'string') allowed.exePath = patch.exePath
     if (typeof patch.playtimeSeconds === 'number' && patch.playtimeSeconds >= 0) {
       allowed.playtimeSeconds = Math.round(patch.playtimeSeconds)
     }
@@ -252,6 +249,33 @@ function registerIpc(): void {
   })
 
   ipcMain.handle('game:remove', (_event, id: string) => removeGame(id))
+
+  const pickProgram = async (title: string): Promise<string | undefined> => {
+    const result = await dialog.showOpenDialog({
+      title,
+      properties: ['openFile'],
+      filters: [{ name: 'Programs and scripts', extensions: ['exe', 'lnk', 'bat', 'cmd', 'ps1'] }]
+    })
+    return result.canceled ? undefined : result.filePaths[0]
+  }
+  ipcMain.handle('game:add-companion', async (_event, id: string) => {
+    const game = getGame(id)
+    if (!game) return undefined
+    const path = await pickProgram('Start with this game')
+    if (!path) return game
+    return patchGame(id, { companions: [...new Set([...(game.companions ?? []), path])] })
+  })
+  ipcMain.handle('game:remove-companion', (_event, id: string, index: number) => {
+    const game = getGame(id)
+    if (!game?.companions || !Number.isInteger(index)) return game
+    return patchGame(id, { companions: game.companions.filter((_, i) => i !== index) })
+  })
+  ipcMain.handle('game:set-after-exit', async (_event, id: string, clear?: boolean) => {
+    if (!getGame(id)) return undefined
+    if (clear) return patchGame(id, { afterExit: undefined })
+    const path = await pickProgram('Run when this game closes')
+    return path ? patchGame(id, { afterExit: path }) : getGame(id)
+  })
 
   ipcMain.handle('game:add-manual', async () => {
     const result = await dialog.showOpenDialog({
@@ -273,7 +297,6 @@ function registerIpc(): void {
 
   ipcMain.handle('captures:list', (_event, id: string) => listCaptures(id))
   ipcMain.handle('captures:reveal', (_event, captureId: string) => {
-    // Only ids a listing handed out resolve, so this can't be pointed anywhere.
     const path = capturePath(captureId)
     if (path) shell.showItemInFolder(path)
   })
@@ -292,8 +315,7 @@ function registerIpc(): void {
   })
 
   ipcMain.handle('settings:set', (_event, patch: Partial<Settings>) => {
-    // The wallpaper file and its palette are only set by the picker below, so
-    // the renderer can't point the art protocol at a name of its choosing.
+    // only the picker sets these, or the renderer could aim applib:// at any file name
     const rest = { ...patch }
     delete rest.backgroundImage
     delete rest.backgroundPalette
@@ -305,7 +327,7 @@ function registerIpc(): void {
     const result = await dialog.showOpenDialog({
       title: 'Choose a background image',
       properties: ['openFile'],
-      // What nativeImage can decode, so the palette can always be sampled.
+      // nativeImage can't decode webp etc, and the palette needs sampling
       filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png'] }]
     })
     if (result.canceled || !result.filePaths.length) return null
@@ -314,14 +336,12 @@ function registerIpc(): void {
 
   ipcMain.handle('settings:clear-background', () => clearBackground())
 
-  // Resolves once the switch has happened, so the renderer can swap views
-  // behind its curtain at the new size rather than mid-resize.
   ipcMain.handle('window:set-fullscreen', (_event, on: boolean) => {
     const win = mainWindow
     const want = Boolean(on)
     if (!win || win.isDestroyed() || win.isFullScreen() === want) return
     return new Promise<void>((resolve) => {
-      // In case the event never comes (the window was hidden, say).
+      // the event never comes if the window's hidden
       const timer = setTimeout(resolve, 1000)
       const done = (): void => {
         clearTimeout(timer)
@@ -342,12 +362,9 @@ function registerIpc(): void {
   )
 
   ipcMain.handle('system:power',(_event, action: PowerAction) => {
-    // Only these; never pass anything from the renderer to a command line.
     if (['sleep', 'restart', 'shutdown', 'quit'].includes(action)) return runPower(action)
   })
 
-  // The title bar's own minimise / maximise / close. Close goes through the
-  // window's close handler, so close-to-tray still applies.
   ipcMain.handle('window:control', (_event, action: WindowAction) => {
     const win = mainWindow
     if (!win || win.isDestroyed()) return
@@ -378,8 +395,6 @@ function registerIpc(): void {
 if (!app.requestSingleInstanceLock()) {
   app.quit()
 } else {
-  // Launching Vitra again (a shortcut, the Start menu) brings the one that's
-  // already running out of the tray.
   app.on('second-instance', () => showWindow(mainWindow))
 
   app.on('before-quit', () => {
@@ -387,8 +402,7 @@ if (!app.requestSingleInstanceLock()) {
   })
 
   void app.whenReady().then(async () => {
-    // Matches the installer's shortcuts (electron-builder appId), so the
-    // taskbar groups and pins Vitra as itself rather than as "Electron".
+    // must match electron-builder's appId or the taskbar groups it as "Electron"
     if (app.isPackaged) app.setAppUserModelId('com.mindlz.vitra')
     registerArtProtocol()
     await load()
@@ -400,12 +414,10 @@ if (!app.requestSingleInstanceLock()) {
       () => mainWindow,
       () => mainWindow?.webContents.send('app:open-big-picture', null)
     )
-    // Keep Windows' startup entry in step with the setting (e.g. after a move).
     applyLoginItem(getSettings().openAtLogin)
     scheduleUpdateChecks()
 
     if (getSettings().scanOnStart) {
-      // Don't block first paint on disk scanning.
       void scanLibrary()
         .then(() => mainWindow?.webContents.send('library:changed', null))
         .catch((err) => console.error('[startup scan]', err))

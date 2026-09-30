@@ -3,6 +3,8 @@ import { spawn } from 'child_process'
 import { dirname } from 'path'
 import { getGame, getSettings, patchGame, save } from './store'
 import { resolveProcessHints, watchSession } from './watcher'
+import { recordSession } from './sessions'
+import { endCompanions, startCompanions } from './companions'
 import type { Game, RunningState } from '../shared/types'
 
 interface ActiveSession {
@@ -10,7 +12,6 @@ interface ActiveSession {
   startedAt: number
   confirmed: boolean
   signal: { cancelled: boolean }
-  /** Settles once the session has been recorded (or discarded). */
   done?: Promise<void>
 }
 
@@ -32,7 +33,6 @@ export function runningStates(): RunningState[] {
 
 const runningListeners = new Set<() => void>()
 
-/** For main-process consumers of the same events (Discord presence). */
 export function onRunningChange(listener: () => void): void {
   runningListeners.add(listener)
 }
@@ -51,8 +51,7 @@ function startProcess(game: Game): { ok: boolean; error?: string } {
     void shell.openExternal(game.epicLaunchUri)
     return { ok: true }
   }
-  // Packaged apps can't be started from their exe; the shell starts them by
-  // app id, the same way the Start menu does.
+  // packaged apps won't start from their exe
   if (game.source === 'xbox' && game.xboxAumid) {
     const child = spawn('explorer.exe', [`shell:AppsFolder\\${game.xboxAumid}`], {
       detached: true,
@@ -62,7 +61,18 @@ function startProcess(game: Game): { ok: boolean; error?: string } {
     child.unref()
     return { ok: true }
   }
-  // Owned but not on disk (GOG): the store's own page, where it installs.
+  // EA has no launcher entry: its exe hands itself to the EA app
+  if (game.launcher?.uri) {
+    void shell.openExternal(game.launcher.uri)
+    return { ok: true }
+  }
+  if (game.launcher?.exe) {
+    const exe = game.launcher.exe
+    const child = spawn(exe, game.launcher.args ?? [], { cwd: dirname(exe), detached: true, stdio: 'ignore' })
+    child.on('error', (err) => console.error(`[launch] ${game.name}:`, err.message))
+    child.unref()
+    return { ok: true }
+  }
   if (!game.installed && game.launchUri) {
     shell.openExternal(game.launchUri).catch(() => {})
     return { ok: true }
@@ -86,16 +96,22 @@ function startProcess(game: Game): { ok: boolean; error?: string } {
   return { ok: false, error: 'No executable or store launch target configured for this game.' }
 }
 
-export async function launchGame(gameId: string): Promise<{ ok: boolean; error?: string }> {
+// via: start through another URI (friend's lobby) but track as usual. main only, never IPC
+export async function launchGame(
+  gameId: string,
+  via?: string
+): Promise<{ ok: boolean; error?: string }> {
   const game = getGame(gameId)
   if (!game) return { ok: false, error: 'Game not found.' }
   if (active.has(gameId)) return { ok: false, error: `${game.name} is already running.` }
 
-  const started = startProcess(game)
-  if (!started.ok) return started
+  if (via) {
+    void shell.openExternal(via)
+  } else {
+    const started = startProcess(game)
+    if (!started.ok) return started
+  }
 
-  // An uninstalled game only opens the store's install prompt, so it isn't
-  // "last played" yet — the session watcher below records that when it runs.
   if (game.installed) {
     patchGame(gameId, { lastPlayed: Date.now() })
     broadcast('library:changed', null)
@@ -105,10 +121,10 @@ export async function launchGame(gameId: string): Promise<{ ok: boolean; error?:
   if (settings.minimiseOnLaunch && game.installed) {
     for (const win of BrowserWindow.getAllWindows()) if (!win.isDestroyed()) win.minimize()
   }
-  if (!settings.trackPlaytime) return { ok: true }
-  // Launching an uninstalled game just opens Steam's install prompt — there's
-  // no process coming, so don't start a session that can only time out.
+  // uninstalled = an install prompt, no process coming
   if (!game.installed) return { ok: true }
+  const companions = await startCompanions(game)
+  if (!settings.trackPlaytime) return { ok: true }
 
   const session: ActiveSession = {
     gameId,
@@ -119,11 +135,9 @@ export async function launchGame(gameId: string): Promise<{ ok: boolean; error?:
   active.set(gameId, session)
   emitRunning()
 
-  // Fire and forget — the session outlives this IPC call.
   session.done = (async () => {
     try {
       const hints = await resolveProcessHints(game)
-      // Cache the discovered names so the next launch doesn't rescan the folder.
       if (hints.length && !game.processHints?.length) patchGame(gameId, { processHints: hints })
 
       const outcome = await watchSession(hints, {
@@ -136,12 +150,18 @@ export async function launchGame(gameId: string): Promise<{ ok: boolean; error?:
       })
 
       if (outcome.confirmed && outcome.seconds > 30) {
+        const end = Date.now()
+        await recordSession({ gameId, start: end - outcome.seconds * 1000, end })
         const current = getGame(gameId)
         patchGame(gameId, {
           playtimeSeconds: (current?.playtimeSeconds ?? 0) + outcome.seconds,
           sessions: (current?.sessions ?? 0) + 1,
           lastPlayed: Date.now()
         })
+      }
+      // cancelled = quit / stop tracking: the game may still be running
+      if (outcome.confirmed && !session.signal.cancelled) {
+        await endCompanions(getGame(gameId) ?? game, companions)
       }
     } catch (err) {
       console.error('[launch] session watch failed:', err)
@@ -155,7 +175,6 @@ export async function launchGame(gameId: string): Promise<{ ok: boolean; error?:
   return { ok: true }
 }
 
-/** Stop tracking a session without touching the game process. */
 export function stopTracking(gameId: string): void {
   const session = active.get(gameId)
   if (session) session.signal.cancelled = true
@@ -165,13 +184,7 @@ export function cancelAllTracking(): void {
   for (const session of active.values()) session.signal.cancelled = true
 }
 
-/**
- * End every session now and record the time played so far, then wait until
- * it's on disk. For shutting the PC down: the game dies with it, and a
- * session is otherwise only written when its process is seen to exit. A
- * cancelled watch still returns what it counted (see watchSession), so this
- * is cancel-and-wait; it takes up to one poll (~4s).
- */
+// before shutdown/quit: a cancelled watch still returns what it counted. up to one poll (~4s)
 export async function finishAllSessions(): Promise<void> {
   const pending = [...active.values()]
   for (const session of pending) session.signal.cancelled = true

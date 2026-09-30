@@ -1,26 +1,14 @@
-; Vitra's look for the installer and uninstaller. electron-builder picks this
-; up from build/ (buildResources) and includes it ahead of its own template,
-; so the defines below are in place before any page is created.
-;
-; NSIS's Modern UI lets exactly three surfaces be restyled: the welcome and
-; finish pages, and the header band across the top of the pages between
-; them. Those get Vitra's plum and the sunrise art (installerSidebar.bmp,
-; installerHeader.bmp, drawn from build/installer-art). The body of the inner
-; pages and the button strip stay Windows' own; theming native buttons and
-; radio buttons means owner-drawing them, which isn't worth the fragility.
+; only welcome/finish pages and the header band can be restyled; inner page
+; bodies and the button strip stay native
 
-; The splash's top colour. The art's edges are this exact colour, so the
-; sidebar and header image meet their pages without a seam.
+; the art's edges are exactly this, so they meet the pages seamlessly
 !define MUI_BGCOLOR "120B17"
 !define MUI_TEXTCOLOR "F5EFF6"
 
-; The header control's size follows the dialog font, so it's rarely exactly
-; the bitmap's 150 x 57; the default stretch squashed the V and the sun.
+; the header control sizes to the dialog font; the default stretch squashed the art
 !define MUI_HEADERIMAGE_BITMAP_STRETCH "AspectFitHeight"
 
-; Titles in a condensed display face, standing in for the app's Bricolage
-; Grotesque (installers can only use installed fonts). Bahnschrift ships with
-; Windows 10 and 11; GDI falls back to the default face where it's missing.
+; installed fonts only, so no Bricolage
 !macro vitraTitleFont CONTROL
   Push $0
   CreateFont $0 "Bahnschrift SemiBold SemiConden" 20 400
@@ -39,8 +27,7 @@
   FunctionEnd
 !macroend
 
-; Replaces the template's finish page to add the styling hook; the launch
-; behaviour is the template's own (assistedInstaller.nsh), unchanged.
+; StartApp copied as-is from the template (assistedInstaller.nsh)
 !macro customFinishPage
   Function StartApp
     ${if} ${isUpdated}
@@ -61,9 +48,7 @@
 
   Function vitraFinishShow
     !insertmacro vitraTitleFont $mui.FinishPage.Title
-    ; With visual styles, a checkbox ignores SetCtlColors and draws black
-    ; text, unreadable on plum. Unthemed, it takes MUI_TEXTCOLOR. (Modern UI
-    ; only does this itself in High Contrast mode.)
+    ; themed checkboxes ignore SetCtlColors (black on plum); unthemed takes MUI_TEXTCOLOR
     System::Call 'UXTHEME::SetWindowTheme(p$mui.FinishPage.Run,w" ",w" ")'
   FunctionEnd
 !macroend
@@ -79,11 +64,9 @@
   FunctionEnd
 !macroend
 
-; The template inserts this just before the uninstaller's finish page and has
-; no hook for that page itself, so its title goes here: a page's MUI_*
-; defines apply to the next page inserted. Only the text, though. A show
-; function can't restyle the title: the page declares $mui.FinishPage.Title
-; when it's inserted, after this, so the font stays Modern UI's bold.
+; no hook for the uninstaller's finish page: MUI_* defines apply to the next page
+; inserted, so the title goes here. can't take the font: $mui.FinishPage.Title is
+; declared after this
 !macro customUninstallPage
   !define MUI_FINISHPAGE_TITLE "Vitra is uninstalled"
 !macroend

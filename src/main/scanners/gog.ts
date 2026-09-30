@@ -3,16 +3,7 @@ import { basename } from 'path'
 import { gogGalaxyDb, runCommand } from '../paths'
 import type { Game } from '../../shared/types'
 
-/*
- * GOG, from two local sources:
- *
- *  - The registry (HKLM\SOFTWARE\WOW6432Node\GOG.com\Games\<id>), written by
- *    both Galaxy and the offline installers: what's installed and its exe.
- *    GOG games are DRM-free, so they launch straight from the exe.
- *  - GOG Galaxy 2's SQLite database: the owned library, titles and art URLs.
- *    Read with Node's built-in node:sqlite (no native module); absent if
- *    Galaxy was never installed, in which case we only know what's on disk.
- */
+// installed: registry (Galaxy and offline installers both write it). owned: Galaxy's sqlite
 
 const REGISTRY_KEY = 'HKLM\\SOFTWARE\\WOW6432Node\\GOG.com\\Games'
 
@@ -32,11 +23,9 @@ interface Owned {
   dlcs: string[]
 }
 
-/** One `reg query /s` for every game, rather than a subprocess per value. */
 async function readRegistry(): Promise<Installed[]> {
   const stdout = await runCommand('reg', ['query', REGISTRY_KEY, '/s'])
   const games: Installed[] = []
-  // Blocks start with the full key path; values follow, indented.
   for (const block of stdout.split(/\r?\n(?=HKEY_)/)) {
     const values: Record<string, string> = {}
     for (const line of block.split(/\r?\n/)) {
@@ -44,7 +33,7 @@ async function readRegistry(): Promise<Installed[]> {
       if (match) values[match[1].toLowerCase()] = match[2].trim()
     }
     const id = values.gameid
-    // dependsOn names the base game: this entry is DLC.
+    // dependsOn = DLC
     if (!id || !values.exe || values.dependson) continue
     games.push({
       id,
@@ -67,7 +56,6 @@ interface SqliteModule {
   }
 }
 
-/** Galaxy stores these pieces as small JSON objects, e.g. {"title":"…"}. */
 function parse<T>(value: unknown): T | undefined {
   if (typeof value !== 'string') return undefined
   try {
@@ -84,15 +72,15 @@ const piece = (type: string): string =>
 function readGalaxy(): Owned[] {
   const file = gogGalaxyDb()
   if (!existsSync(file)) return []
-  // Loaded at runtime rather than imported: the bundler doesn't know node:sqlite.
+  // runtime-loaded: the bundler doesn't know node:sqlite
   const moduleId: string = 'node:sqlite'
   const sqlite = process.getBuiltinModule?.(moduleId) as unknown as SqliteModule | undefined
   if (!sqlite) return []
 
   const db = new sqlite.DatabaseSync(file, { readOnly: true })
   try {
-    // Only text columns: Galaxy's user ids overflow a JS number and would throw.
-    // The library also holds releases imported from other stores (steam_…).
+    // text columns only: 64-bit user ids overflow Number and node:sqlite throws.
+    // gog_ prefix: the library also holds releases imported from other stores
     const rows = db
       .prepare(
         `SELECT r.releaseKey AS releaseKey,
@@ -123,7 +111,7 @@ function readGalaxy(): Owned[] {
   }
 }
 
-/** GOG files older packages as "Elder Scrolls IV, The"; read it the normal way round. */
+// "Elder Scrolls IV, The"
 function tidyTitle(title: string): string {
   return title.replace(/^(.*), (The|A|An)$/, '$2 $1').trim()
 }
@@ -133,7 +121,6 @@ function gogGame(id: string, name: string, installed: boolean): Game {
     id: `gog:${id}`,
     name,
     source: 'gog',
-    // Opens Galaxy on the game's page, where it can be installed.
     launchUri: `goggalaxy://openGameView/${id}`,
     processHints: [],
     tags: [],
@@ -154,7 +141,6 @@ export async function scanGog(): Promise<{ games: Game[]; owned: number; errors:
   try {
     library = readGalaxy()
   } catch (err) {
-    // Locked mid-write or a schema change: the installed games still count.
     errors.push(`GOG Galaxy library: ${(err as Error).message}`)
   }
 
@@ -163,8 +149,7 @@ export async function scanGog(): Promise<{ games: Game[]; owned: number; errors:
   const byId = new Map(library.map((entry) => [entry.id, entry]))
   const dlcIds = new Set(library.flatMap((entry) => entry.dlcs))
   const games: Game[] = []
-  // GOG can list one game under two products (an old and a current package);
-  // one card per title is what a person expects.
+  // GOG lists some games twice (old + current package)
   const titles = new Set<string>()
 
   for (const entry of installed) {

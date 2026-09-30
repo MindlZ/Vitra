@@ -5,25 +5,22 @@ import { join } from 'path'
 
 export function runCommand(file: string, args: string[], timeout = 10_000): Promise<string> {
   return new Promise((resolve) => {
-    execFile(file, args, { timeout, windowsHide: true }, (err, stdout) => {
+    // reg query /s on Uninstall blows past the 1MB default
+    execFile(file, args, { timeout, windowsHide: true, maxBuffer: 32 * 1024 * 1024 }, (err, stdout) => {
       resolve(err && !stdout ? '' : stdout)
     })
   })
 }
 
-/** Read a single registry value. Returns undefined if the key/value is absent. */
 export async function readRegistryValue(key: string, value: string): Promise<string | undefined> {
   const stdout = await runCommand('reg', ['query', key, '/v', value])
-  // Format: "    SteamPath    REG_SZ    c:/program files (x86)/steam"
+  // "    SteamPath    REG_SZ    c:/program files (x86)/steam"
   const match = stdout.match(new RegExp(`${value}\\s+REG_[A-Z_]+\\s+(.+)`, 'i'))
   const result = match?.[1]?.trim()
   return result && result.length ? result : undefined
 }
 
-/**
- * Cached: the art resolver asks per game, and each miss would otherwise spawn
- * a `reg query` subprocess.
- */
+// cached: the art ladder asks per game, ~180 reg spawns a library otherwise
 const steamPathCache = new Map<string, string | undefined>()
 
 export function clearSteamPathCache(): void {
@@ -55,7 +52,7 @@ async function locateSteamPath(override?: string): Promise<string | undefined> {
   ].filter((path): path is string => Boolean(path))
 
   for (const candidate of candidates) {
-    // The registry stores a forward-slash path; normalise before joining.
+    // registry has forward slashes
     const normalised = candidate.replace(/\//g, '\\')
     if (existsSync(join(normalised, 'steamapps'))) return normalised
   }
@@ -70,15 +67,11 @@ export function epicManifestDir(): string {
   return join(programData(), 'Epic', 'EpicGamesLauncher', 'Data', 'Manifests')
 }
 
-/**
- * The launcher's catalogue cache: base64 JSON of the catalogue items for the
- * account's library, installed or not. The only local record of what's owned.
- */
+// base64 JSON, the only local record of what's owned
 export function epicCatalogFile(): string {
   return join(programData(), 'Epic', 'EpicGamesLauncher', 'Data', 'Catalog', 'catcache.bin')
 }
 
-/** GOG Galaxy 2's local database: the owned library, titles and art URLs. */
 export function gogGalaxyDb(): string {
   return join(programData(), 'GOG.com', 'Galaxy', 'storage', 'galaxy-2.0.db')
 }

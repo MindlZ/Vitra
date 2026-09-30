@@ -4,7 +4,6 @@ import { parseVdf, pickNode, pickString } from '../vdf'
 import { findSteamPath } from '../paths'
 import type { Game } from '../../shared/types'
 
-/** Runtimes, redistributables and SDKs that show up as "apps" but aren't games. */
 export const IGNORED_APP_IDS = new Set([
   '7', // Steam client itself
   '480', // Spacewar (the SDK test app)
@@ -33,7 +32,7 @@ const IGNORED_NAME_PATTERNS = [
 ]
 
 const STEAM_CDN = 'https://cdn.cloudflare.steamstatic.com/steam/apps'
-/** Valve's newer asset host, used as a fallback when the CDN is missing a size. */
+// newer asset host, mirrors the CDN
 const STEAM_ASSETS = 'https://shared.steamstatic.com/store_item_assets/steam/apps'
 
 export function isGameLike(appId: string, name: string): boolean {
@@ -41,11 +40,6 @@ export function isGameLike(appId: string, name: string): boolean {
   return !IGNORED_NAME_PATTERNS.some((re) => re.test(name))
 }
 
-/**
- * A game the account owns but hasn't installed. There's no manifest for these,
- * so the name comes from the store lookup and there's no install path — but the
- * CDN art and Steam's launch URI both still work from the app id alone.
- */
 export function ownedSteamGame(appId: string, name: string): Game {
   return {
     id: `steam:${appId}`,
@@ -66,7 +60,6 @@ export function ownedSteamGame(appId: string, name: string): Game {
   }
 }
 
-/** Every Steam library root that currently exists on disk. */
 async function readLibraryFolders(steamPath: string): Promise<string[]> {
   const roots = new Set<string>([steamPath])
   const file = join(steamPath, 'steamapps', 'libraryfolders.vdf')
@@ -77,13 +70,12 @@ async function readLibraryFolders(steamPath: string): Promise<string[]> {
 
     for (const [key, value] of Object.entries(folders)) {
       if (!/^\d+$/.test(key)) continue
-      // Modern format: { path: "..." }. Legacy format: "1" "D:\\SteamLibrary".
-      // parseVdf already unescapes the doubled backslashes Valve writes.
+      // new: { path: "..." }, legacy: "1" "D:\\SteamLibrary"
       const path = typeof value === 'string' ? value : pickString(value, 'path')
       if (path) roots.add(path)
     }
   } catch {
-    // No libraryfolders.vdf — the default library is still worth scanning.
+    // no libraryfolders.vdf, default library only
   }
 
   const existing: string[] = []
@@ -92,7 +84,7 @@ async function readLibraryFolders(steamPath: string): Promise<string[]> {
       await fs.access(join(root, 'steamapps'))
       existing.push(root)
     } catch {
-      // Library on a drive that isn't plugged in right now.
+      // drive not connected
     }
   }
   return existing
@@ -131,7 +123,7 @@ export async function scanSteam(steamPathOverride?: string): Promise<{
         const installdir = pickString(state, 'installdir')
         if (!appId || !name || seen.has(appId)) continue
 
-        // StateFlags bit 2 (value 4) means "fully installed".
+        // StateFlags & 4 = fully installed
         const stateFlags = Number(pickString(state, 'StateFlags') ?? '0')
         if (!(stateFlags & 4)) continue
         if (!isGameLike(appId, name)) continue
@@ -164,12 +156,7 @@ export async function scanSteam(steamPathOverride?: string): Promise<{
   return { games, errors }
 }
 
-/**
- * Art candidates in preference order — not every app has every size, and Valve
- * has been migrating library assets to a second host, so both are tried.
- * Portrait capsules first; the wide header is a last resort that crops, but a
- * cropped real cover still beats a generated one.
- */
+// not every app has every size. header.jpg crops badly but beats a generated cover
 export function steamArtCandidates(appId: string, kind: 'cover' | 'hero' | 'logo'): string[] {
   const paths =
     kind === 'cover'
@@ -186,8 +173,6 @@ export function steamArtCandidates(appId: string, kind: 'cover' | 'hero' | 'logo
 
   return [
     ...paths.map((path) => `${STEAM_CDN}/${appId}/${path}`),
-    // Only reached when the CDN has none of the above; the two hosts mirror
-    // each other, so trying the best sizes again is enough.
     ...paths.slice(0, 2).map((path) => `${STEAM_ASSETS}/${appId}/${path}`)
   ]
 }

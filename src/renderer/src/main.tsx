@@ -7,7 +7,7 @@ import { primeStartup } from './lib/sound'
 import { restorePalette } from './lib/theme'
 
 restorePalette()
-// Decoded before React even renders, so it's ready when the window shows.
+// decode before React renders so it's ready the moment the window shows
 void primeStartup()
 
 createRoot(document.getElementById('root')!).render(

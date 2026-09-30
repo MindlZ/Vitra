@@ -1,8 +1,4 @@
-/**
- * The Ko-fi cup. At rest it's lucide's Coffee; when its button (a `group`)
- * is hovered or focused, the cup fills and the steam rises. The motion and
- * colours live in index.css (.vitra-coffee), keyed off the parent group.
- */
+// animation lives in index.css (.vitra-coffee), keyed off the parent `group`
 export default function CoffeeIcon({ className = '' }: { className?: string }) {
   return (
     <svg
@@ -15,7 +11,6 @@ export default function CoffeeIcon({ className = '' }: { className?: string }) {
       aria-hidden
       className={`vitra-coffee ${className}`}
     >
-      {/* A touch finer than the cup, so the wisps read as steam, not blobs. */}
       <g className="vitra-coffee__steam" strokeWidth="1.6">
         <path d="M6 6c-.9-.8.9-1.7 0-2.5s.9-1.7 0-2.5" />
         <path d="M10 6c-.9-.8.9-1.7 0-2.5s.9-1.7 0-2.5" />

@@ -4,11 +4,10 @@ import { join } from 'path'
 
 export interface AppInfo {
   name?: string
-  /** "game", "dlc", "music", "demo", … or "unknown" when the lookup failed. */
+  // "unknown" = the lookup failed
   type: string
-  /** Steam genre ids. Absent on entries cached before genres were fetched. */
+  // absent on entries cached before genres were fetched
   genres?: string[]
-  /** Canonical art URLs, kept so the art resolver has a fallback to the CDN. */
   headerImage?: string
   capsuleImage?: string
   fetchedAt: number
@@ -17,9 +16,8 @@ export interface AppInfo {
 type Cache = Record<string, AppInfo>
 
 const CACHE_VERSION = 1
-/** Retry lookups that failed, but not often. */
 const UNKNOWN_TTL_MS = 7 * 24 * 60 * 60 * 1000
-/** Be a good citizen with Valve's unauthenticated store endpoint. */
+// unauthenticated endpoint, rate limits easily
 const REQUEST_GAP_MS = 250
 const MAX_PER_SCAN = 120
 
@@ -27,7 +25,6 @@ function cacheFile(): string {
   return join(app.getPath('userData'), 'steam-app-info.json')
 }
 
-/** Held in memory once read — the art resolver asks per game. */
 let memo: Cache | undefined
 
 async function loadCache(): Promise<Cache> {
@@ -55,7 +52,7 @@ async function saveCache(apps: Cache): Promise<void> {
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 
-/** One app's public store record. Returns null on a rate limit so we can stop. */
+// null = rate limited, stop
 async function fetchAppInfo(appId: string): Promise<AppInfo | null> {
   try {
     const response = await fetch(
@@ -94,14 +91,8 @@ async function fetchAppInfo(appId: string): Promise<AppInfo | null> {
   }
 }
 
-/**
- * Resolve names and app types for Steam apps we only know the id of (owned but
- * not installed). Results are cached on disk permanently, so this only costs
- * requests the first time an app is seen.
- */
 export async function resolveAppInfo(
   appIds: string[],
-  /** Also refetch entries cached before genres were recorded. */
   needGenres = false
 ): Promise<Map<string, AppInfo>> {
   const cache = await loadCache()
@@ -117,7 +108,7 @@ export async function resolveAppInfo(
   let fetched = 0
   for (const appId of missing) {
     const info = await fetchAppInfo(appId)
-    if (!info) break // rate limited — keep what we have and try again next scan
+    if (!info) break
     cache[appId] = info
     fetched++
     await sleep(REQUEST_GAP_MS)
@@ -133,7 +124,7 @@ export async function resolveAppInfo(
   return result
 }
 
-/** Read-only cache hit, for the art resolver — never triggers a request. */
+// never fetches
 export async function cachedAppInfo(appId: string): Promise<AppInfo | undefined> {
   return (await loadCache())[appId]
 }

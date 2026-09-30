@@ -3,7 +3,6 @@ import { basename, join } from 'path'
 import { runCommand } from './paths'
 import type { Game } from '../shared/types'
 
-/** Helpers, prereq installers and crash handlers that ship next to games. */
 const EXE_BLACKLIST = [
   /crash/i,
   /^unins/i,
@@ -41,7 +40,7 @@ function isPlausibleGameExe(name: string): boolean {
   return name.toLowerCase().endsWith('.exe') && !EXE_BLACKLIST.some((re) => re.test(name))
 }
 
-/** Bounded recursive walk — game folders can be enormous. */
+// bounded: game folders can be enormous
 async function findExecutables(root: string, maxDepth = 4, budget = 4000): Promise<string[]> {
   const found: string[] = []
   let visited = 0
@@ -81,10 +80,6 @@ function similarity(exe: string, title: string): number {
   return 0
 }
 
-/**
- * Work out which process names mean "this game is running".
- * Prefers hints the store already has (Epic gives them to us outright).
- */
 export async function resolveProcessHints(game: Game): Promise<string[]> {
   if (game.processHints?.length) return game.processHints
 
@@ -101,12 +96,10 @@ export async function resolveProcessHints(game: Game): Promise<string[]> {
           similarity(exe, game.name) +
           (/[\\/]Binaries[\\/]Win64[\\/]/i.test(exe) ? 30 : 0) +
           (/[\\/]bin(aries)?[\\/]/i.test(exe) ? 10 : 0) +
-          // An exe sitting in the install root is usually the entry point.
           (exe.toLowerCase() === join(installDir, basename(exe)).toLowerCase() ? 15 : 0)
       }))
       .sort((a, b) => b.score - a.score)
 
-    // A strong title match is trustworthy on its own; otherwise keep a few.
     const strong = ranked.filter((r) => r.score >= 70)
     for (const { exe } of (strong.length ? strong : ranked).slice(0, 6)) {
       hints.add(basename(exe).toLowerCase())
@@ -127,14 +120,12 @@ export async function listRunningProcesses(): Promise<Set<string>> {
 }
 
 export interface SessionOutcome {
-  /** Seconds the game process was alive. 0 when we never saw it. */
   seconds: number
   confirmed: boolean
 }
 
 export interface WatchOptions {
   pollMs?: number
-  /** How long to wait for the game process to appear before giving up. */
   graceMs?: number
   onConfirmed?: () => void
   signal?: { cancelled: boolean }
@@ -142,11 +133,7 @@ export interface WatchOptions {
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 
-/**
- * Poll the process list until the game appears and then exits.
- * Needed because Steam/Epic games are started via URI, so we never own the
- * process and can't just wait on a child handle.
- */
+// polled: store games start by URI, so there's no child process to wait on
 export async function watchSession(
   hints: string[],
   options: WatchOptions = {}
@@ -175,8 +162,7 @@ export async function watchSession(
   }
   if (!startedAt) return { seconds: 0, confirmed: false }
 
-  // Require two consecutive empty polls so a brief launcher hand-off (bootstrapper
-  // exits, real game starts) doesn't end the session early.
+  // two empty polls: survives a bootstrapper handing off to the real exe
   let misses = 0
   while (misses < 2) {
     await sleep(pollMs)

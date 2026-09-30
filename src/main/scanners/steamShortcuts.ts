@@ -5,11 +5,8 @@ import { binaryNumber, binaryString, parseBinaryVdf, pickBinary } from '../vdfBi
 import type { BinaryVdfNode } from '../vdfBinary'
 import type { Game } from '../../shared/types'
 
-/**
- * Exe is normally quoted and may carry trailing arguments; StartDir is a bare
- * path that can contain spaces. Never split on whitespace — cut at the
- * executable extension instead, and otherwise take the field whole.
- */
+// Exe is usually quoted + may have args; StartDir is bare with spaces.
+// never split on whitespace
 function parsePathField(raw: string | undefined): string | undefined {
   if (!raw) return undefined
   const trimmed = raw.trim()
@@ -22,11 +19,6 @@ function parsePathField(raw: string | undefined): string | undefined {
   return exe ? exe[1] : trimmed
 }
 
-/**
- * Non-Steam games the user added to their Steam library. These live only in
- * shortcuts.vdf and have no app manifest, so they're invisible to the normal
- * Steam scan.
- */
 export async function scanSteamShortcuts(
   steamPathOverride?: string
 ): Promise<{ games: Game[]; errors: string[] }> {
@@ -68,7 +60,7 @@ export async function scanSteamShortcuts(
       const exePath = parsePathField(binaryString(entry, 'Exe') ?? binaryString(entry, 'exe'))
       if (!name || !exePath) continue
 
-      // appid is a signed int32 in the file; normalise so the id is stable.
+      // stored as signed int32
       const rawId = binaryNumber(entry, 'appid')
       const key = rawId !== undefined ? String(rawId >>> 0) : exePath.toLowerCase()
       const id = `steam:shortcut-${key}`
@@ -82,8 +74,7 @@ export async function scanSteamShortcuts(
       games.push({
         id,
         name,
-        // Shown under Steam because that's where the user added it, but it has
-        // no app id, so launch() falls through to running the exe directly.
+        // no steamAppId, so launch falls through to the exe
         source: 'steam',
         installDir: existsSync(startDir) ? startDir : undefined,
         exePath,

@@ -4,25 +4,12 @@ import { extname, join } from 'path'
 import { artDir, getSettings, publicSettings, setSettings } from './store'
 import type { Palette, Settings } from '../shared/types'
 
-/*
- * Custom wallpapers, and the UI colours sampled from them.
- *
- * The picked file is copied into the art cache (so applib://art/ serves it and
- * the original can move or vanish), and its palette is worked out once, here,
- * and saved with it: the renderer applies stored colours at first paint rather
- * than re-deriving them on every launch.
- *
- * Colour work is in OKLCH so every hue comes out equally bright. In HSL a
- * yellow and a blue at the same lightness look nothing alike; here the accent
- * always sits where Vitra's magenta does (L ~0.75), so black text on a primary
- * button and the glow around a card read the same whatever the image is.
- */
+// OKLCH, not HSL: equal L looks equally bright across hues, so the accent always
+// lands where the magenta does (L 0.75) and black text on it stays readable
 
-/** Hue histogram resolution: 72 bins of 5 degrees. */
 const BINS = 72
 const BIN_DEG = 360 / BINS
 
-/** sRGB byte -> linear light, once. */
 const LINEAR = Array.from({ length: 256 }, (_, i) => {
   const c = i / 255
   return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)
@@ -42,7 +29,7 @@ function toOklch(r: number, g: number, b: number): [number, number, number] {
   return [L, Math.hypot(A, B), hue < 0 ? hue + 360 : hue]
 }
 
-/** OKLCH -> linear sRGB, unclamped, so the caller can see if it's in gamut. */
+// unclamped, so the caller can tell if it's out of gamut
 function oklchToLinear(L: number, C: number, hue: number): [number, number, number] {
   const h = (hue * Math.PI) / 180
   const a = C * Math.cos(h)
@@ -57,7 +44,7 @@ function oklchToLinear(L: number, C: number, hue: number): [number, number, numb
   ]
 }
 
-/** An OKLCH colour as #rrggbb, giving up chroma (never lightness or hue) to fit sRGB. */
+// out of gamut: give up chroma, never lightness or hue
 function toHex(L: number, C: number, hue: number): string {
   let rgb = oklchToLinear(L, C, hue)
   while (C > 0 && rgb.some((v) => v < -0.0005 || v > 1.0005)) {
@@ -85,20 +72,7 @@ function binDistance(a: number, b: number): number {
 
 const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v))
 
-/**
- * The image's most vivid hue becomes the accent; the strongest separate hue
- * (at least 45 degrees away) becomes ember. Pixels are weighted by chroma
- * squared, so a small patch of saturated colour beats a large grey-blue sky,
- * which is what "the colour of this picture" usually means to a person.
- *
- * Returns undefined for an image with too little colour to go on (greyscale,
- * near-black) or one nativeImage can't decode; the UI keeps Vitra's magenta.
- */
-/**
- * How light the image is on average: mean OKLab lightness, 0 (black) to 1
- * (white). The backdrop darkens light wallpapers by it before the veil, so
- * text keeps its contrast on a mostly-white image (see Backdrop.tsx).
- */
+// mean OKLab L, 0-1. Backdrop.tsx darkens light wallpapers by it
 export function measureLightness(file: string): number | undefined {
   const image = nativeImage.createFromPath(file)
   if (image.isEmpty()) return undefined
@@ -122,11 +96,12 @@ export function measureLightness(file: string): number | undefined {
   return counted ? Math.round((total / counted) * 1000) / 1000 : undefined
 }
 
+// most vivid hue -> accent, strongest hue >= 45deg away -> ember. weighted by chroma^2
+// so a small saturated patch beats a big grey sky. undefined = too grey, keep magenta
 export function extractPalette(file: string): Palette | undefined {
   const image = nativeImage.createFromPath(file)
   if (image.isEmpty()) return undefined
 
-  // A thumbnail is plenty for a hue histogram and keeps this instant.
   const size = image.getSize()
   const scale = Math.min(1, 96 / Math.max(size.width, size.height))
   const small = image.resize({
@@ -134,7 +109,7 @@ export function extractPalette(file: string): Palette | undefined {
     height: Math.max(1, Math.round(size.height * scale)),
     quality: 'good'
   })
-  // BGRA on Windows.
+  // BGRA
   const pixels = small.toBitmap()
 
   const weight = new Float64Array(BINS)
@@ -148,7 +123,7 @@ export function extractPalette(file: string): Palette | undefined {
     if (pixels[i + 3] < 128) continue
     counted++
     const [L, C, hue] = toOklch(pixels[i + 2], pixels[i + 1], pixels[i])
-    // Near-black and near-white pixels have unreliable hue.
+    // hue is noise near black/white/grey
     if (C < 0.04 || L < 0.2 || L > 0.95) continue
     if (C >= 0.06) vivid++
     const w = C * C
@@ -162,14 +137,12 @@ export function extractPalette(file: string): Palette | undefined {
 
   if (!counted || vivid / counted < 0.02) return undefined
 
-  // Smooth around the circle (a ~20 degree triangle) so one hue split across
-  // two bins isn't beaten by a narrower spike.
+  // ~20deg triangle, so a hue split over two bins isn't beaten by a narrow spike
   const smooth = new Float64Array(BINS)
   for (let i = 0; i < BINS; i++) {
     for (let j = -3; j <= 3; j++) smooth[i] += weight[(i + j + BINS) % BINS] * (4 - Math.abs(j))
   }
 
-  /** Weighted mean hue and chroma of the pixels within 20 degrees of a peak. */
   const around = (peak: number): { hue: number; chroma: number } => {
     let x = 0
     let y = 0
@@ -189,8 +162,7 @@ export function extractPalette(file: string): Palette | undefined {
   let first = 0
   for (let i = 1; i < BINS; i++) if (smooth[i] > smooth[first]) first = i
 
-  // A real second colour: its own local peak, well clear of the first, and
-  // not a trace. Otherwise ember is derived, an analogous step round the wheel.
+  // a local peak, >= 45deg off, not a trace. else ember = accent + 50deg
   let second = -1
   for (let i = 0; i < BINS; i++) {
     if (binDistance(i, first) < 9) continue
@@ -203,8 +175,7 @@ export function extractPalette(file: string): Palette | undefined {
   const ember =
     second === -1 ? { hue: (accent.hue + 50) % 360, chroma: accent.chroma } : around(second)
 
-  // Lightness and chroma ranges are Vitra's own magenta and peach, so any
-  // image lands in the same register: vivid, light enough for black text.
+  // L/C ranges taken from the brand magenta + peach
   const accentC = clamp(accent.chroma * 1.25, 0.12, 0.2)
   const emberC = clamp(ember.chroma * 1.1, 0.09, 0.15)
 
@@ -216,10 +187,9 @@ export function extractPalette(file: string): Palette | undefined {
   }
 }
 
-/** Copy the picked image into the art cache and make it the wallpaper. */
 export async function setBackground(source: string): Promise<Settings> {
   const ext = extname(source).toLowerCase() || '.jpg'
-  // Vary the name so the renderer's <img> cache doesn't keep the old picture.
+  // timestamped to bust the <img> cache
   const filename = `background-${Date.now()}${ext}`
   const target = join(artDir(), filename)
   await fs.mkdir(artDir(), { recursive: true })
@@ -245,7 +215,7 @@ export async function setBackground(source: string): Promise<Settings> {
   return publicSettings()
 }
 
-/** Images picked before lightness was measured: measure them once, on start. */
+// images picked before lightness existed
 export function backfillLightness(): void {
   const { backgroundImage, backgroundLightness } = getSettings()
   if (!backgroundImage || backgroundLightness !== undefined) return
@@ -257,7 +227,6 @@ export function backfillLightness(): void {
   }
 }
 
-/** Forget the custom image; if it was showing, back to the default preset. */
 export async function clearBackground(): Promise<Settings> {
   const { backgroundImage: previous, wallpaper } = getSettings()
   setSettings({

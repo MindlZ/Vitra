@@ -1,8 +1,5 @@
-# Renders the installer's bitmaps from the HTML beside this script, with
-# headless Edge (as the app icon was), then converts them to the 24-bit BMPs
-# NSIS wants. Run it after changing the art:
-#   powershell -ExecutionPolicy Bypass -File build\installer-art\render.ps1
-# The BMPs are committed; packaging doesn't run this.
+# powershell -ExecutionPolicy Bypass -File build\installer-art\render.ps1
+# BMPs are committed; packaging doesn't run this
 
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
@@ -25,14 +22,13 @@ foreach ($item in $art) {
   $url = ([Uri](Join-Path $here $item.Html)).AbsoluteUri
   $profile = Join-Path $env:TEMP 'vitra-installer-art-profile'
   if (Test-Path $png) { Remove-Item $png }
-  # Start-Process: Edge reports progress on stderr, which PowerShell 5.1
-  # would turn into a terminating error.
+  # Start-Process: PS 5.1 turns Edge's stderr progress into a terminating error
   Start-Process -FilePath $edge -Wait -WindowStyle Hidden -ArgumentList @(
     '--headless', '--disable-gpu', '--hide-scrollbars', '--force-device-scale-factor=1',
     '--allow-file-access-from-files', "`"--user-data-dir=$profile`"",
     "--window-size=$($item.Width),$($item.Height)", "`"--screenshot=$png`"", $url
   )
-  # Edge returns before the file is flushed on some machines.
+  # Edge can return before the file is flushed
   for ($i = 0; $i -lt 50 -and -not (Test-Path $png); $i++) { Start-Sleep -Milliseconds 100 }
 
   $source = [Drawing.Image]::FromFile($png)

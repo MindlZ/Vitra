@@ -3,30 +3,22 @@ import logo from '../assets/vitra-logo.png'
 import { playStartup } from '../lib/sound'
 
 interface Props {
-  /** True once the library has loaded; the splash won't leave before this. */
   ready: boolean
   onDone: () => void
 }
 
-/** Long enough for the sun to clear the horizon and the mark to light. */
 const MIN_MS = 2250
-/** Never hold the app hostage to a slow first read. */
 const MAX_MS = 5000
-/** Matches the .vitra-splash transition. */
+// matches the .vitra-splash transition
 const LEAVE_MS = 560
 
-/** The longest the sunrise will wait for its sound before going without it. */
 const SOUND_WAIT_MS = 900
 
 function prefersReducedMotion(): boolean {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches
 }
 
-/**
- * Resolves once the window is actually on screen. Electron creates it hidden
- * and shows it on ready-to-show, and the renderer is often running before
- * that: starting the sound or the sunrise earlier plays them to nobody.
- */
+// the window starts hidden until ready-to-show; anything started before that plays to nobody
 function whenVisible(): Promise<void> {
   if (document.visibilityState === 'visible') return Promise.resolve()
   return new Promise((resolve) => {
@@ -39,27 +31,17 @@ function whenVisible(): Promise<void> {
   })
 }
 
-/*
- * Once per app start, shared across StrictMode's double mount: both mounts
- * await the same playback rather than the second one playing it again.
- * Resolves when sound is actually coming out (or it failed, or was absent).
- */
+// module-level so StrictMode's double mount doesn't play it twice
 let startup: Promise<void> | undefined
 function startStartupSound(): Promise<void> {
   startup ??= whenVisible().then(() => playStartup(0.45))
   return startup
 }
 
-/**
- * Sunrise over the waterline, shown once per start. It doubles as the loading
- * state: it stays until the library is read (or MAX_MS), so the grid appears
- * already populated. Any click or key skips it.
- */
 export default function Splash({ ready, onDone }: Props) {
   const [leaving, setLeaving] = useState(false)
   const [minElapsed, setMinElapsed] = useState(false)
-  // The sunrise holds on its first frame until the sound starts, so the two
-  // always begin on the same beat however long the file took to load.
+  // held on frame one until the sound starts, so they always begin together
   const [started, setStarted] = useState(false)
   const done = useRef(onDone)
   done.current = onDone
@@ -67,7 +49,7 @@ export default function Splash({ ready, onDone }: Props) {
   const leave = useCallback(() => setLeaving(true), [])
 
   useEffect(() => {
-    // Sound isn't motion, so it plays even when the sunrise is skipped.
+    // sound isn't motion: still plays under reduced motion
     if (prefersReducedMotion()) {
       void startStartupSound()
       done.current()
@@ -78,7 +60,6 @@ export default function Splash({ ready, onDone }: Props) {
     const begin = (): void => {
       if (!cancelled) setStarted(true)
     }
-    // The wait for sound only counts once there's a window to see.
     void whenVisible().then(() => {
       if (!cancelled) fallback = setTimeout(begin, SOUND_WAIT_MS)
     })
@@ -89,7 +70,7 @@ export default function Splash({ ready, onDone }: Props) {
     }
   }, [])
 
-  // The minimum and maximum run from when the sunrise actually starts.
+  // timed from the real start, not mount
   useEffect(() => {
     if (!started) return
     const min = setTimeout(() => setMinElapsed(true), MIN_MS)
@@ -119,7 +100,6 @@ export default function Splash({ ready, onDone }: Props) {
     <div
       aria-hidden
       onPointerDown={leave}
-      // The sunrise is always the dark one, whatever the app's appearance.
       data-appearance="dark"
       className={`vitra-splash ${started ? 'is-started' : ''} ${leaving ? 'is-leaving' : ''}`}
     >

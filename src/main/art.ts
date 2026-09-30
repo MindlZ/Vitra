@@ -22,18 +22,12 @@ const URL_KEY: Record<ArtKind, 'coverUrl' | 'heroUrl' | 'logoUrl'> = {
   logo: 'logoUrl'
 }
 
-/**
- * Where a piece of art can come from, in the order we try them.
- * `file` and `icon` are local and always beat the network.
- */
 type Source =
   | { kind: 'file'; path: string; letterbox?: boolean }
   | { kind: 'url'; url: string }
   | { kind: 'icon'; exePath: string }
 
-/** Art we've already failed to find, so we don't re-request it every render. */
 const misses = new Set<string>()
-/** In-flight resolutions, so twenty cards asking at once make one request. */
 const inFlight = new Map<string, Promise<string | undefined>>()
 
 function safeName(id: string): string {
@@ -49,17 +43,8 @@ async function exists(path: string): Promise<boolean> {
   }
 }
 
-/**
- * The full ladder, best first:
- *   1. art the user customised inside Steam (covers non-Steam shortcuts too)
- *   2. Steam's CDN, across every capsule size
- *   3. the canonical URLs from the store API, if we already cached them
- *   4. whatever the scanner attached (Epic's and GOG's own box art), and for
- *      heroes, an Xbox package's splash screen
- *   5. SteamGridDB, when a key is configured
- *   6. an Xbox package's square tile, letterboxed
- *   7. the executable's own icon, so nothing local is ever art-less
- */
+// order matters: Steam grid art > CDN > store API > scanner's own > xbox splash (hero)
+// > SteamGridDB > xbox tile (letterboxed) > exe icon
 async function sourcesFor(game: Game, kind: ArtKind): Promise<Source[]> {
   const sources: Source[] = []
   const settings = getSettings()
@@ -86,8 +71,6 @@ async function sourcesFor(game: Game, kind: ArtKind): Promise<Source[]> {
     sources.push({ kind: 'url', url: attached })
   }
 
-  // Xbox packages carry their own art. The splash screen is a proper hero, so
-  // it goes ahead of the network; the square tile is only a fallback cover.
   const xboxArt =
     game.source === 'xbox' && game.installDir ? await xboxLocalArt(game.installDir, kind) : undefined
   if (xboxArt && kind === 'hero') sources.push({ kind: 'file', path: xboxArt })
@@ -96,7 +79,6 @@ async function sourcesFor(game: Game, kind: ArtKind): Promise<Source[]> {
 
   if (xboxArt && kind === 'cover') sources.push({ kind: 'file', path: xboxArt, letterbox: true })
 
-  // An icon is a poor cover but an honest one, and it needs no network.
   if (kind === 'cover' && game.exePath && (await exists(game.exePath))) {
     sources.push({ kind: 'icon', exePath: game.exePath })
   }
@@ -111,7 +93,7 @@ async function download(url: string, dest: string): Promise<boolean> {
     if (!(response.headers.get('content-type') ?? '').startsWith('image/')) return false
 
     const buffer = Buffer.from(await response.arrayBuffer())
-    // Steam serves a tiny placeholder for missing art; treat those as a miss.
+    // Steam's placeholder for missing art is tiny
     if (buffer.byteLength < 1024) return false
     await fs.writeFile(dest, buffer)
     return true
@@ -129,7 +111,6 @@ async function copyLocal(source: string, dest: string): Promise<boolean> {
   }
 }
 
-/** Windows gives us the embedded icon at up to 256px, which is enough here. */
 async function extractIcon(exePath: string, dest: string): Promise<boolean> {
   try {
     const icon = await app.getFileIcon(exePath, { size: 'large' })
@@ -144,14 +125,13 @@ async function extractIcon(exePath: string, dest: string): Promise<boolean> {
 }
 
 function extensionFor(source: Source): string {
-  // Marked so the renderer can letterbox it: an exe icon is square, and
-  // cropping it to a 2:3 card would cut the artwork in half.
+  // .icon. = square art; the renderer letterboxes instead of cropping to 2:3
   if (source.kind === 'icon') return '.icon.png'
   if (source.kind === 'file') {
     const ext = extname(source.path).toLowerCase() || '.png'
     return source.letterbox ? `.icon${ext}` : ext
   }
-  // GOG serves webp; naming it .jpg would send the wrong content-type.
+  // GOG serves webp; a .jpg name would get the wrong content-type
   const ext = source.url.match(/\.(png|webp)(\?|$)/i)?.[1]?.toLowerCase()
   return ext ? `.${ext}` : '.jpg'
 }
@@ -182,10 +162,6 @@ async function resolve(gameId: string, kind: ArtKind): Promise<string | undefine
   return undefined
 }
 
-/**
- * Resolve one piece of art to a file inside the art cache, fetching it on first
- * use. Returns the bare filename (served over the applib:// protocol).
- */
 export async function ensureArt(gameId: string, kind: ArtKind): Promise<string | undefined> {
   const game = getGame(gameId)
   if (!game) return undefined
@@ -210,7 +186,6 @@ export async function ensureArt(gameId: string, kind: ArtKind): Promise<string |
   return task
 }
 
-/** Copy an image the user picked into the art cache and attach it to the game. */
 export async function setLocalArt(
   gameId: string,
   kind: ArtKind,
@@ -218,7 +193,7 @@ export async function setLocalArt(
 ): Promise<string | undefined> {
   if (!getGame(gameId)) return undefined
   const ext = extname(sourcePath).toLowerCase() || '.jpg'
-  // Vary the name so the renderer's <img> cache doesn't keep the old picture.
+  // timestamped: busts the <img> cache. backup.ts also relies on this pattern
   const filename = `${safeName(gameId)}-${kind}-${Date.now()}${ext}`
   await fs.mkdir(artDir(), { recursive: true })
   await fs.copyFile(sourcePath, join(artDir(), filename))
@@ -240,10 +215,6 @@ export async function clearArt(gameId: string, kind: ArtKind): Promise<void> {
   misses.delete(`${gameId}:${kind}`)
 }
 
-/**
- * Drop every cached miss so a rescan — or a newly added API key — gets another
- * go at the games that came back empty.
- */
 export function retryMissingArt(): void {
   misses.clear()
 }

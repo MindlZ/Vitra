@@ -4,29 +4,19 @@ import { Clock } from './Home'
 import Visualiser from './Visualiser'
 
 interface Props {
-  /** Fading out: the user is back. */
   leaving: boolean
 }
 
-/** How far the composition wanders, and how often, so nothing burns in. */
+// burn-in protection
 const DRIFT_PX = 28
 const DRIFT_EVERY_MS = 60_000
 
-/**
- * The ambient screen after a spell of inactivity: the clock, what's playing
- * (album art reflected on the waterline, title and artist), and the
- * visualiser along the bottom, over the album art blurred into a glow.
- *
- * It never appears suddenly. App collapses the chrome first (title bar and
- * sidebar slide away, the page fades), then this fades up; waking reverses
- * it. Any input wakes it (lib/idle.ts), and the waking input goes nowhere.
- */
 export default function ScreenSaver({ leaving }: Props) {
   const media = useMedia()
   const [shown, setShown] = useState(false)
   const [drift, setDrift] = useState({ x: 0, y: 0 })
 
-  // Mount at opacity 0, then transition up once that's been painted.
+  // two frames: the opacity-0 state must paint before the transition starts
   useEffect(() => {
     let second = 0
     const first = requestAnimationFrame(() => {
@@ -55,7 +45,6 @@ export default function ScreenSaver({ leaving }: Props) {
     <div
       aria-hidden
       data-state={leaving ? 'leaving' : shown ? 'shown' : 'entering'}
-      // A saver stays dark: it may run for hours, and in a dark room.
       data-appearance="dark"
       className="vitra-saver"
     >
@@ -78,7 +67,6 @@ export default function ScreenSaver({ leaving }: Props) {
                   draggable={false}
                   className="h-full w-full rounded-[14px] object-cover shadow-[0_30px_70px_-20px_rgba(0,0,0,0.85)]"
                 />
-                {/* Standing on the waterline, like every cover in Vitra. */}
                 <img src={art} alt="" draggable={false} className="vitra-saver__reflection" />
               </div>
             )}

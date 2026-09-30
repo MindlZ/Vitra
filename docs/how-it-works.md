@@ -61,7 +61,30 @@ These sources feed the library:
   `shell:AppsFolder`, like the Start menu. Installed games only: the owned
   library is behind an Xbox Live sign-in.
 
+- **Battle.net, EA app, Ubisoft Connect and Riot** — all from Windows'
+  Uninstall keys (`scanners/launchers.ts`), where each launcher registers its
+  games; one `reg query /s` per hive instead of four private formats
+  (Battle.net's own is protobuf). Battle.net entries carry `--uid=<product>`
+  in their uninstall command; EA entries run EAInstaller's `Cleanup.exe` and
+  name the game exe as their icon (the content id comes from
+  `__Installer\installerdata.xml`; EA copies of Steam games are skipped);
+  Ubisoft keys are `Uplay Install <id>`; Riot keys are
+  `Riot Game <product>.<patchline>`. Uninstall entries can outlive the game,
+  so each install folder must exist. Installed games only: the owned
+  libraries are behind each store's sign-in.
+
 Plus local executables you pick yourself.
+
+**The same game on two stores is one card** (`lib/duplicates.ts`, renderer
+only). Copies are matched by a normalised title (case, accents, ™/®,
+punctuation and `&` ignored; "Doom" and "Doom 3" stay apart), skipping local
+files and hidden games (hiding a copy is how to split a wrong match). One copy
+stands in: the store the user picked under **Launch from** on the game page
+(`preferredStore`, written to every copy), else an installed one, else the
+most played, else Steam first. Playtime and sessions are summed for display;
+each copy keeps its own on disk. Store lenses, sidebar counts and big
+picture's tabs include a game under every store it's on (`hasSource`), and a
+session on any copy shows on the stand-in's card.
 
 A library on a drive that isn't connected is never deleted. Those games are
 flagged `installed: false` and keep their playtime.
@@ -122,6 +145,22 @@ Shortcuts and local games are spawned directly. For an uninstalled Steam game th
 same URI opens Steam's install prompt, so the button reads **Install** and no
 playtime session is started.
 
+Battle.net, Riot and Ubisoft games also start through their launcher (the
+`launcher` field, set only by the scan): `Battle.net.exe --exec="launch
+<code>"` (older products have their own short codes, newer ones are the uid
+upper-cased), `RiotClientServices.exe --launch-product=… --launch-patchline=…`,
+and `uplay://launch/<id>/0`. EA games run their own exe, which hands itself to
+the EA app for sign-in.
+
+**Programs that come along** (`main/companions.ts`): per game, programs to
+start with it, an option to close them when it ends, and one program or script
+to run afterwards. Paths only come from main's own file dialog. One that's
+already running is neither started twice nor closed afterwards. Only exes can
+be closed (Vitra holds their pid; it's a polite `taskkill` without `/f`);
+shortcuts and scripts go through the shell. The end actions need playtime
+tracking on, and don't run when the watch was cancelled (quitting Vitra,
+Stop tracking), since the game may still be running.
+
 ### Playtime
 
 Because store games are launched by URI, Vitra never owns the process, so it
@@ -139,6 +178,32 @@ Sessions under 30 seconds are discarded. On first import, Steam's own recorded
 hours are read from `localconfig.vdf` so totals look right immediately instead of
 starting at zero. The detail page shows which process names a game is tracked by,
 and a **Stop tracking** button in case the wrong one was picked up.
+
+Every counted session is also logged with its start and end
+(`main/sessions.ts`, `sessions.json`), which is what **Stats** draws: hours
+per week, a 26-week calendar and the last 30 days' most played. Seeded Steam
+hours and anything from before the log have no dates, so the totals come from
+the library and the charts from the log. A session past midnight counts on
+both days.
+
+### Achievements
+
+With a Steam key, a game with a Steam copy shows how many achievements are
+unlocked and the three rarest (`main/achievements.ts`): `GetPlayerAchievements`
+for what's unlocked (needs **Game details: Public** on the profile, else Steam
+answers 403 and the page says it's private), `GetSchemaForGame` for names and
+icons, and the keyless `GetGlobalAchievementPercentagesForApp` for rarity.
+Cached per app for 10 minutes; failures aren't cached.
+
+### Backup
+
+Settings → Library → Backup writes one `.vitrabackup` file (JSON): the games,
+settings, session log, and only the images the user picked (their
+`<id>-<kind>-<timestamp>` names tell them apart from downloaded art, which
+comes back on its own). API keys are never included; restoring keeps this
+PC's keys and Steam folder. Restoring asks first, validates every game
+through `normaliseGame`, and only writes art files with plain names, so a
+crafted file can't write outside `art\`.
 
 ### Artwork
 
@@ -179,6 +244,30 @@ so rather than guessing.
 
 Results are cached for 45 seconds in the main process and the panel refreshes
 once a minute, so an open rail doesn't hammer the API.
+
+**Joining.** When `GetPlayerSummaries` reports a `lobbysteamid` (a joinable
+Steam lobby) or a real `gameserverip` (a dedicated server), the friend is
+`joinable`: the panel shows Join, and on Home their face gets an accent ring
+and joins instead of opening their profile. The target
+(`steam://joinlobby/<app>/<lobby>/<friend>` or `steam://connect/<ip>`) stays
+in main; the renderer only sends a friend id (`friends:join`). If the game is
+installed in the library it goes through `launchGame(id, via)`, so last played
+and playtime tracking work as for any launch. Games with their own
+matchmaking (Fortnite, Valorant and the like) never report either field, and
+Steam's own "Join Game" uses rich presence that the Web API doesn't expose, so
+Vitra will sometimes miss a join Steam offers. Xbox has no joinable data.
+
+Xbox friends come from [OpenXBL](https://xbl.io) (`main/friendsXbox.ts`), a
+third-party proxy for Xbox Live, with its own optional key. Xbox Live itself
+needs a Microsoft sign-in flow that Vitra doesn't have. The response is Xbox's
+PeopleHub shape passed through: `presenceState` gives online/away/offline, and
+the primary `presenceDetails` entry with `IsGame` gives the game. It's cached
+for 2 minutes (20 seconds on a forced refresh), since the free tier is 150
+requests an hour. Both sources merge into one list sorted the same way; a
+friend on both shows twice, since nothing links the two accounts. One source
+failing doesn't hide the other's friends. Epic, GOG and PlayStation have no
+key-based route: each would mean an account sign-in or borrowing another
+app's login token.
 
 ### Look
 
@@ -229,7 +318,12 @@ src/
     vdf.ts           Valve KeyValues parser (text)
     vdfBinary.ts     Valve KeyValues parser (binary, for shortcuts.vdf)
     paths.ts         registry and well-known path lookups
-    scanners/        steam, steamShortcuts, steamPlaytime, steamStore, epic
+    sessions.ts      the session log behind Stats
+    achievements.ts  Steam achievements
+    backup.ts        .vitrabackup export/import
+    companions.ts    programs started with a game
+    scanners/        steam, steamShortcuts, steamPlaytime, steamStore, epic,
+                     gog, xbox, launchers (Battle.net, EA, Ubisoft, Riot)
   preload/index.ts   contextBridge surface (window.launcher)
   shared/            types.ts, api.ts — shared by main and renderer
   renderer/src/      React app
@@ -242,8 +336,9 @@ allowed to change.
 
 ## Data
 
-`%APPDATA%\Vitra\` holds `library.json` (games and settings),
-`steam-app-info.json` (the store name/type cache) and `art\` (cached images).
+`%APPDATA%\Vitra\` holds `library.json` (games and settings), `sessions.json`
+(the play log behind Stats), `steam-app-info.json` (the store name/type cache)
+and `art\` (cached images).
 Deleting any of them is safe — a rescan rebuilds them, though hand-made tags and
 covers live in `library.json`.
 

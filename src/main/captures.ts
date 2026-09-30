@@ -7,27 +7,10 @@ import { findSteamPath, readRegistryValue } from './paths'
 import { getGame, getGames, getSettings } from './store'
 import type { Capture, Game } from '../shared/types'
 
-/*
- * Screenshots and clips of each game, from wherever Windows gamers usually
- * end up with them:
- *
- *   Steam       userdata/<account>/760/remote/<appid>/screenshots, keyed by
- *               app id, so the match is exact. Steam writes its own
- *               thumbnails beside them.
- *   Game Bar    the Captures folder (Win+Alt+PrtScn, Win+Alt+G). Flat, and
- *               named "<window title> <date> <time>.png|mp4", so the title
- *               is matched against the library.
- *   Folders     recorders that file by game (NVIDIA's Videos\<Game>): a
- *               subfolder of Videos, Videos\NVIDIA or Captures whose name
- *               matches a game.
- *
- * Nothing is copied or indexed ahead of time; a game's page asks, and the
- * folders are read then. Files are served by an opaque id, and only files a
- * listing handed out can be served, so the renderer can't name a path.
- */
+// served by opaque id, and only ids a listing handed out, so the renderer can't name a path
 
 const IMAGE_EXT = new Set(['.png', '.jpg', '.jpeg', '.webp', '.bmp', '.gif'])
-// What Chromium plays. Game Bar's HDR .jxr stills sit beside a .png copy.
+// Game Bar's HDR .jxr stills always have a .png twin
 const VIDEO_EXT = new Set(['.mp4', '.m4v', '.webm'])
 
 const MIME: Record<string, string> = {
@@ -42,16 +25,14 @@ const MIME: Record<string, string> = {
   '.webm': 'video/webm'
 }
 
-/** A game page lists at most this many; a replay-buffer habit can fill a folder. */
 const MAX_PER_GAME = 400
 
 interface Known {
   path: string
-  /** A thumbnail the source already made (Steam's). */
+  // Steam's own thumbnail
   thumb?: string
 }
 
-/** Every file a listing has handed out, by id. The protocol serves only these. */
 const known = new Map<string, Known>()
 
 function idFor(path: string): string {
@@ -73,18 +54,11 @@ async function readdirSafe(dir: string): Promise<Dirent[]> {
   }
 }
 
-/* --- matching titles to games ------------------------------------------- */
-
-/**
- * Letters and digits only, so "Arena Breakout Infinite  " meets "Arena
- * Breakout: Infinite" and "Fallout4" meets "Fallout 4". Also drops ® / ™
- * and the zero-width characters some games put in their window titles.
- */
+// letters + digits only: also eats ®/™ and zero-width chars in window titles
 function normalise(text: string): string {
   return text.normalize('NFKD').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '')
 }
 
-/** What a game might be called in a window title or a folder name. */
 function keysOf(game: Game): Set<string> {
   const keys = new Set<string>([normalise(game.name)])
   const exes = [...(game.processHints ?? []), ...(game.exePath ? [basename(game.exePath)] : [])]
@@ -93,20 +67,14 @@ function keysOf(game: Game): Set<string> {
   return keys
 }
 
-/** Installed first, then the one played most recently: the copy you'd mean. */
 function preferred(games: Game[]): Game | undefined {
   return [...games].sort(
     (a, b) => Number(b.installed) - Number(a.installed) || (b.lastPlayed ?? 0) - (a.lastPlayed ?? 0)
   )[0]
 }
 
-/**
- * Which game a title belongs to, if any. An exact match on name or exe wins.
- * Failing that, one name may end or start with the other ("Skyrim Special
- * Edition" and "The Elder Scrolls V: Skyrim Special Edition"), but only when
- * the shorter is long enough to mean something and exactly one game fits:
- * a wrong game's page showing your screenshots is worse than none.
- */
+// exact name/exe, else a start/end match of >= 8 chars that fits exactly one game.
+// wrong screenshots on a page are worse than none
 function resolveTitle(title: string, games: Game[]): Game | undefined {
   const key = normalise(title)
   if (key.length < 3) return undefined
@@ -124,15 +92,9 @@ function resolveTitle(title: string, games: Game[]): Game | undefined {
   return names.size === 1 ? preferred(loose) : undefined
 }
 
-/* --- where captures live ------------------------------------------------ */
-
 let capturesDirCache: Promise<string> | undefined
 
-/**
- * Game Bar's folder. It can be moved (Explorer → Captures → Properties →
- * Location), which records it as the AppCaptures known folder; otherwise
- * it's Videos\Captures. Cached: the lookup spawns `reg`.
- */
+// a moved Captures folder shows up as the AppCaptures known folder. cached: spawns reg
 function capturesDir(): Promise<string> {
   capturesDirCache ??= readRegistryValue(
     'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\User Shell Folders',
@@ -145,13 +107,11 @@ function capturesDir(): Promise<string> {
   return capturesDirCache
 }
 
-/** Steam screenshot folders' names: the app id, or a shortcut's id (both forms). */
 function steamIds(game: Game): string[] {
   if (game.steamAppId) return [game.steamAppId]
   const shortcut = game.id.match(/^steam:shortcut-(\d+)$/)
   if (!shortcut) return []
-  // Screenshots of a non-Steam shortcut may be filed under its 32-bit app id
-  // or the 64-bit game id Steam derives from it.
+  // shortcuts can be filed under the 32-bit app id or the derived 64-bit game id
   const gameId = (BigInt(shortcut[1]) << 32n) | 0x02000000n
   return [shortcut[1], gameId.toString()]
 }
@@ -187,7 +147,7 @@ async function steamCaptures(game: Game): Promise<Found[]> {
   return found
 }
 
-/** Game Bar stamps the capture time on the end, in the locale's format. */
+// Game Bar: "<window title> <date> <time>", in the locale's date format
 const STAMP =
   /\s+\d{1,4}[-_.]\d{1,2}[-_.]\d{1,4}\s+\d{1,2}[-_.]\d{1,2}[-_.]\d{1,2}(?:\s*[ap]m)?$/i
 
@@ -224,7 +184,6 @@ async function folderCaptures(game: Game, games: Game[]): Promise<Found[]> {
     for (const entry of await readdirSafe(root)) {
       if (!entry.isDirectory()) continue
       const dir = join(root, entry.name)
-      // The Captures folder is itself a subfolder of Videos.
       if (dir.toLowerCase() === captures.toLowerCase()) continue
       if (resolveTitle(entry.name, games)?.id !== game.id) continue
       for (const file of await readdirSafe(dir)) {
@@ -263,7 +222,7 @@ export async function listCaptures(gameId: string): Promise<Capture[]> {
           name: basename(item.path)
         })
       } catch {
-        // Gone since the folder was read.
+        // deleted since the readdir
       }
     })
   )
@@ -274,8 +233,6 @@ export async function listCaptures(gameId: string): Promise<Capture[]> {
 export function capturePath(id: string): string | undefined {
   return known.get(id)?.path
 }
-
-/* --- thumbnails --------------------------------------------------------- */
 
 function thumbDir(): string {
   return join(app.getPath('userData'), 'capture-thumbs')
@@ -294,18 +251,14 @@ function nextThumbJob(): void {
   }
 }
 
-/**
- * A small JPEG of a capture, made once through Windows' own thumbnailer
- * (which also does the frame of a video) and cached. Screenshots are 2–4 MB
- * PNGs; a page of them at full size would be slow to scroll.
- */
+// Windows' thumbnailer does video frames too
 async function thumbnailFor(id: string, entry: Known): Promise<string | undefined> {
   if (entry.thumb) {
     try {
       await fs.access(entry.thumb)
       return entry.thumb
     } catch {
-      // Steam hasn't made one; make our own.
+      // no Steam thumb, make one
     }
   }
 
@@ -315,7 +268,7 @@ async function thumbnailFor(id: string, entry: Known): Promise<string | undefine
     await fs.access(file)
     return file
   } catch {
-    // Not made yet.
+    // not cached yet
   }
 
   let job = thumbInFlight.get(file)
@@ -345,9 +298,7 @@ async function thumbnailFor(id: string, entry: Known): Promise<string | undefine
   return job
 }
 
-/* --- serving ------------------------------------------------------------ */
-
-/** A file as a Response, honouring Range so a clip can seek. */
+// honours Range so clips can seek
 async function serveFile(path: string, request: Request): Promise<Response> {
   const { size } = await fs.stat(path)
   const headers: Record<string, string> = {
@@ -379,7 +330,7 @@ async function serveFile(path: string, request: Request): Promise<Response> {
   return new Response(body(0, size - 1), { headers: { ...headers, 'content-length': String(size) } })
 }
 
-/** applib://capture/<id> is the file, applib://capture/<id>/thumb its thumbnail. */
+// applib://capture/<id>[/thumb]
 export async function serveCapture(request: Request): Promise<Response> {
   const [id, variant] = new URL(request.url).pathname.replace(/^\/+/, '').split('/')
   const entry = known.get(id)
@@ -388,7 +339,6 @@ export async function serveCapture(request: Request): Promise<Response> {
   if (variant === 'thumb') {
     const thumb = await thumbnailFor(id, entry)
     if (thumb) return serveFile(thumb, request)
-    // No thumbnail: a still can stand in for its own; a clip can't.
     if (kindOf(entry.path) !== 'image') return new Response('Not found', { status: 404 })
   }
   return serveFile(entry.path, request)

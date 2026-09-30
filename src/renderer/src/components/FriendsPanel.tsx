@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
-import { KeyRound, Loader2, RefreshCw, Users, X } from 'lucide-react'
+import { KeyRound, Loader2, LogIn, RefreshCw, Users, X } from 'lucide-react'
 import type { Friend } from '@shared/types'
-import { STATE_DOT, STATE_LABEL, useFriends } from '../lib/friends'
+import { joinFriend, STATE_DOT, STATE_LABEL, STORE_LABEL, useFriends } from '../lib/friends'
 
 interface Props {
   onClose: () => void
@@ -32,12 +32,15 @@ function Avatar({ friend }: { friend: Friend }) {
   )
 }
 
-function Row({ friend }: { friend: Friend }) {
+function Row({ friend, mixed }: { friend: Friend; mixed: boolean }) {
   return (
     <div className="flex items-center gap-2.5 rounded-[10px] px-2 py-1.5 transition-colors hover:bg-white/5">
       <Avatar friend={friend} />
       <div className="min-w-0 flex-1">
-        <div className="truncate text-[12.5px] text-ink">{friend.name}</div>
+        <div className="flex items-baseline gap-1.5">
+          <span className="truncate text-[12.5px] text-ink">{friend.name}</span>
+          {mixed && <span className="shrink-0 text-[10.5px] text-muted">{STORE_LABEL[friend.store]}</span>}
+        </div>
         <div
           className={`truncate text-[11px] ${friend.state === 'playing' ? 'text-accent' : 'text-muted'}`}
           title={friend.playing ?? STATE_LABEL[friend.state]}
@@ -45,7 +48,29 @@ function Row({ friend }: { friend: Friend }) {
           {friend.playing ?? STATE_LABEL[friend.state]}
         </div>
       </div>
+      {friend.joinable && <JoinButton friend={friend} />}
     </div>
+  )
+}
+
+function JoinButton({ friend }: { friend: Friend }) {
+  const [joining, setJoining] = useState(false)
+
+  return (
+    <button
+      onClick={() => {
+        setJoining(true)
+        // Steam takes a few seconds to hand over
+        void joinFriend(friend).finally(() => setTimeout(() => setJoining(false), 3000))
+      }}
+      disabled={joining}
+      aria-label={`Join ${friend.name}`}
+      title={friend.playing ? `Join in ${friend.playing}` : 'Join'}
+      className="glass-btn flex h-7 shrink-0 items-center gap-1 rounded-full px-2.5 text-[11px] text-dim hover:text-ink"
+    >
+      {joining ? <Loader2 className="h-3 w-3 animate-spin" /> : <LogIn className="h-3 w-3" />}
+      Join
+    </button>
   )
 }
 
@@ -82,6 +107,7 @@ export default function FriendsPanel({ onClose, onOpenSettings }: Props) {
 
   const inGame = snapshot?.friends.filter((friend) => friend.state === 'playing') ?? []
   const around = snapshot?.friends.filter((friend) => friend.state !== 'playing') ?? []
+  const mixed = new Set(snapshot?.friends.map((friend) => friend.store)).size > 1
 
   return (
     <aside className="glass-chrome flex w-[262px] shrink-0 flex-col border-l border-white/6">
@@ -122,7 +148,7 @@ export default function FriendsPanel({ onClose, onOpenSettings }: Props) {
           <Empty
             icon={<KeyRound className="h-6 w-6" />}
             title="Not connected"
-            body="Vitra needs a free Steam Web API key to read your friends list. It stays on this PC."
+            body="Add a Steam or Xbox key"
             action={{ label: 'Open settings', onClick: onOpenSettings }}
           />
         ) : snapshot.status !== 'ok' ? (
@@ -137,20 +163,25 @@ export default function FriendsPanel({ onClose, onOpenSettings }: Props) {
             icon={<Users className="h-6 w-6" />}
             title="Nobody's around"
             body={
-              snapshot.offlineCount
+              snapshot.message ??
+              (snapshot.offlineCount
                 ? `All ${snapshot.offlineCount} of your friends are offline right now.`
-                : 'No friends found on this account.'
+                : 'No friends found on this account.')
             }
           />
         ) : (
           <>
+            {/* one source failed, the other worked */}
+            {snapshot.message && (
+              <p className="px-2 pb-3 text-[11px] leading-relaxed text-muted">{snapshot.message}</p>
+            )}
             {inGame.length > 0 && (
               <div className="mb-3">
                 <div className="px-2 pb-1 text-[12px] font-medium text-muted">
                   In game
                 </div>
                 {inGame.map((friend) => (
-                  <Row key={friend.steamId} friend={friend} />
+                  <Row key={friend.id} friend={friend} mixed={mixed} />
                 ))}
               </div>
             )}
@@ -161,7 +192,7 @@ export default function FriendsPanel({ onClose, onOpenSettings }: Props) {
                   Online
                 </div>
                 {around.map((friend) => (
-                  <Row key={friend.steamId} friend={friend} />
+                  <Row key={friend.id} friend={friend} mixed={mixed} />
                 ))}
               </div>
             )}

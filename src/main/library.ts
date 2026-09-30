@@ -6,11 +6,12 @@ import { scanSteamShortcuts } from './scanners/steamShortcuts'
 import { scanEpic } from './scanners/epic'
 import { scanGog } from './scanners/gog'
 import { scanXbox } from './scanners/xbox'
+import { scanLaunchers } from './scanners/launchers'
 import { readSteamPlaytime } from './scanners/steamPlaytime'
 import { resolveAppInfo } from './scanners/steamStore'
 import type { Game, ScanResult } from '../shared/types'
 
-/** Fields a scan is allowed to refresh; everything else belongs to the user. */
+// only these are the scan's; everything else is the user's
 function mergeDiscovered(existing: Game, found: Game): Game {
   return {
     ...existing,
@@ -18,15 +19,14 @@ function mergeDiscovered(existing: Game, found: Game): Game {
     installDir: found.installDir ?? existing.installDir,
     exePath: found.exePath ?? existing.exePath,
     steamAppId: found.steamAppId ?? existing.steamAppId,
-    // Epic's flips between ?action=install and ?action=launch as a game comes
-    // and goes, so the scan's always wins when it has one.
+    // flips between ?action=install and ?action=launch
     epicLaunchUri: found.epicLaunchUri ?? existing.epicLaunchUri,
     xboxAumid: found.xboxAumid ?? existing.xboxAumid,
     launchUri: found.launchUri ?? existing.launchUri,
+    launcher: found.launcher ?? existing.launcher,
     coverUrl: existing.coverFile ? existing.coverUrl : (found.coverUrl ?? existing.coverUrl),
     heroUrl: found.heroUrl ?? existing.heroUrl,
     logoUrl: found.logoUrl ?? existing.logoUrl,
-    // Epic hands us authoritative process names; keep ours if it doesn't.
     processHints: found.processHints?.length ? found.processHints : existing.processHints,
     installed: found.installed
   }
@@ -48,20 +48,20 @@ function seedSteamHistory(
 
 export async function scanLibrary(): Promise<ScanResult> {
   const settings = getSettings()
-  const [steam, shortcuts, epic, gog, xbox, playtime] = await Promise.all([
+  const [steam, shortcuts, epic, gog, xbox, launchers, playtime] = await Promise.all([
     scanSteam(settings.steamPath),
     scanSteamShortcuts(settings.steamPath),
     scanEpic(),
     scanGog(),
     scanXbox(),
+    scanLaunchers(),
     readSteamPlaytime(settings.steamPath)
   ])
 
-  const errors = [...steam.errors, ...shortcuts.errors, ...epic.errors, ...gog.errors, ...xbox.errors]
-  const discovered = [...steam.games, ...shortcuts.games, ...epic.games, ...gog.games, ...xbox.games]
+  const sources = [steam, shortcuts, epic, gog, xbox, launchers]
+  const errors = sources.flatMap((source) => source.errors)
+  const discovered = sources.flatMap((source) => source.games)
 
-  // Anything the account has touched but isn't on disk: owned, not installed.
-  // Names and app types come from the public store endpoint (cached on disk).
   const installedAppIds = new Set(steam.games.map((game) => game.steamAppId))
   const candidates = playtime.knownAppIds.filter(
     (appId) => !installedAppIds.has(appId) && !IGNORED_APP_IDS.has(appId)
@@ -73,7 +73,7 @@ export async function scanLibrary(): Promise<ScanResult> {
       const info = await resolveAppInfo(candidates)
       for (const appId of candidates) {
         const entry = info.get(appId)
-        // Only real games — this drops DLC, soundtracks, demos and videos.
+        // type filter drops DLC, soundtracks, demos, videos
         if (!entry?.name || entry.type !== 'game') continue
         if (!isGameLike(appId, entry.name)) continue
         discovered.push(ownedSteamGame(appId, entry.name))
@@ -99,8 +99,7 @@ export async function scanLibrary(): Promise<ScanResult> {
       next.push(game)
       continue
     }
-    // A store game we've seen before that isn't on disk now. Keep it (and its
-    // playtime) but flag it, so an offline drive never wipes history.
+    // never delete: an unplugged drive would wipe playtime
     if (game.installed) missing++
     next.push({ ...game, installed: false })
   }
@@ -114,7 +113,6 @@ export async function scanLibrary(): Promise<ScanResult> {
       updated++
       continue
     }
-    // Seed Steam's own recorded hours on first import so totals look right.
     nextById.set(found.id, seedSteamHistory(found, playtime))
     added++
   }
@@ -130,33 +128,20 @@ export async function scanLibrary(): Promise<ScanResult> {
       epic: epic.games.length - epic.owned,
       gog: gog.games.length - gog.owned,
       xbox: xbox.games.length,
+      launchers: launchers.games.length,
       owned: ownedCount + epic.owned + gog.owned
     },
     errors
   }
 }
 
-/**
- * Steam's genres for software. Steam files tools like Wallpaper Engine and
- * Lossless Scaling as type "game", but tags them with these. Education (54)
- * is left out on purpose: plenty of educational titles are games.
- */
+// Steam's software genres (51-60). 54 Education skipped: plenty of those are games
 const SOFTWARE_GENRES = new Set(['51', '52', '53', '55', '56', '57', '58', '59', '60'])
 
-/**
- * Programs Steam files under ordinary game genres, so the genre check can't
- * see them. Aimlabs (714010) is Action/Casual/Simulation on the store. Anything
- * else is one click on the detail page's Game/App switch.
- */
+// software filed under game genres. 714010 Aimlabs
 const KNOWN_SOFTWARE = new Set(['714010'])
 
-/**
- * Marks Steam titles that are really software, so Home can keep them out of
- * Continue playing. Runs after a scan rather than inside it: the first pass
- * looks up every installed title's genres (~250 ms apart, to be kind to the
- * store endpoint), and that shouldn't hold up the scan. Returns true if any
- * game changed, so the caller can tell the renderer.
- */
+// separate from the scan: the first run fetches every genre, ~250ms apart
 export async function classifySoftware(): Promise<boolean> {
   const steamIds = getGames()
     .map((game) => game.steamAppId)
@@ -165,7 +150,7 @@ export async function classifySoftware(): Promise<boolean> {
 
   const info = await resolveAppInfo(steamIds, true)
   let changed = false
-  // Re-read: a scan may have replaced the list while we were fetching.
+  // re-read: a scan may have replaced the list meanwhile
   for (const game of getGames()) {
     const genres = game.steamAppId ? info.get(game.steamAppId)?.genres : undefined
     if (!genres) continue

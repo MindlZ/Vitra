@@ -1,19 +1,9 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import type { WindowAction } from '@shared/types'
 
-/*
- * Minimise, maximise/restore and close, drawn by Vitra rather than Windows
- * (the window has no native caption buttons; see main/index.ts). Each hit
- * area runs the full height of the title bar and the last one reaches the
- * window's corner, so flinging the mouse to the top right still closes, as
- * it does natively. The visible part is a quiet pill like the title bar's
- * other buttons, close included: a red close felt out of place in Vitra.
- *
- * data-nav-skip: a controller never lands here. A stray A on close would
- * hide the window.
- */
+// full-height hit areas, the last one reaching the corner (Fitts).
+// data-nav-skip: a stray A on close would hide the window
 
-/** 10px glyphs on a 1px stroke, the weight of Windows 11's own. */
 function Glyph({ children }: { children: ReactNode }) {
   return (
     <svg
@@ -38,7 +28,6 @@ function Control({
 }: {
   label: string
   action: WindowAction
-  /** The last button: its hit area runs on into the window's corner. */
   corner?: boolean
   children: ReactNode
 }) {
@@ -60,11 +49,10 @@ function Control({
 
 export default function WindowControls() {
   const [maximized, setMaximized] = useState(false)
-  // Unfocused windows dim their controls, as native ones do.
   const [focused, setFocused] = useState(() => document.hasFocus())
 
   useEffect(() => {
-    // Guarded: a renderer can hot-reload ahead of the preload that adds these.
+    // renderer can hot-reload ahead of preload
     void window.launcher.isMaximized?.().then(setMaximized)
     const off = window.launcher.onMaximizedChanged?.(setMaximized)
     const onFocus = (): void => setFocused(true)

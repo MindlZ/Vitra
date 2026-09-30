@@ -6,16 +6,8 @@ interface Props {
   className?: string
 }
 
-/**
- * A cover's reflection on the waterline, as real DOM rather than
- * -webkit-box-reflect: Chromium keeps box-reflect off the fast path, so a grid
- * of them repaints on every scroll frame. This is an ordinary flipped image
- * that rasterises once and then just scrolls.
- *
- * The strip is 20% of the cover's height (a 2:3 cover gives 10:3), showing the
- * cover's bottom edge mirrored and fading out. useArt is cached, so the second
- * CoverImage costs no extra request.
- */
+// flipped DOM, never -webkit-box-reflect: that's off Chromium's fast path and a
+// grid of them made scrolling stutter
 export default function CoverReflection({ game, className = '' }: Props) {
   return (
     <div aria-hidden className={`vitra-reflection relative aspect-[10/3] ${className}`}>

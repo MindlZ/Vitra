@@ -11,6 +11,7 @@ const DEFAULT_SETTINGS: Settings = {
   minimiseOnLaunch: true,
   showFriends: true,
   backgroundDim: 65,
+  backgroundParticles: true,
   wallpaper: 'sunset',
   theme: 'auto',
   matchBackgroundColours: true,
@@ -18,6 +19,7 @@ const DEFAULT_SETTINGS: Settings = {
   bigPictureOnStart: false,
   closeToTray: true,
   openAtLogin: false,
+  startInTray: false,
   checkForUpdates: true,
   discordPresence: false,
   screenSaverMinutes: 5
@@ -34,12 +36,7 @@ export function artDir(): string {
   return join(app.getPath('userData'), 'art')
 }
 
-/*
- * API keys never touch disk in plain text. They're encrypted with Electron's
- * safeStorage — DPAPI on Windows, so bound to this Windows user on this
- * machine — and written to a separate `secrets` block as base64. In memory
- * (main process only) they stay plain, since the scanners need them.
- */
+// keys: safeStorage (DPAPI, so this user on this PC only) in a `secrets` block; plain in memory only
 type SecretBlock = Partial<Record<SecretKey, string>>
 
 function encryptSecrets(settings: Settings): SecretBlock | undefined {
@@ -49,8 +46,7 @@ function encryptSecrets(settings: Settings): SecretBlock | undefined {
     const value = settings[key]
     if (!value) continue
     if (!safeStorage.isEncryptionAvailable()) {
-      // Never fall back to plain text: the key works for this session and the
-      // user re-enters it next time.
+      // never fall back to plain text; session-only instead
       console.warn(`[store] encryption unavailable; ${key} kept in memory only`)
       continue
     }
@@ -68,8 +64,7 @@ function decryptSecrets(block: SecretBlock | undefined): Partial<Settings> {
     try {
       out[key] = safeStorage.decryptString(Buffer.from(stored, 'base64'))
     } catch (err) {
-      // Copied from another user or PC: DPAPI can't open it. Drop the key
-      // rather than fail the whole load; Settings shows it as not set.
+      // copied from another user/PC
       console.warn(`[store] could not decrypt ${key}:`, (err as Error).message)
     }
   }
@@ -82,10 +77,9 @@ export async function load(): Promise<LibraryData> {
     const raw = await fs.readFile(libraryFile(), 'utf8')
     const parsed = JSON.parse(raw) as Partial<LibraryData> & { secrets?: SecretBlock }
     const settings = { ...DEFAULT_SETTINGS, ...(parsed.settings ?? {}) }
-    // From before the wallpaper presets: a custom image meant "show it".
+    // pre-presets files
     if (!parsed.settings?.wallpaper && settings.backgroundImage) settings.wallpaper = 'custom'
-    // Files from before encryption hold keys in plain text; they're kept for
-    // this load and rewritten encrypted straight away.
+    // pre-encryption files had plain keys: rewrite straight away
     migrate = SECRET_KEYS.some((key) => Boolean(parsed.settings?.[key]))
     data = {
       version: parsed.version ?? CURRENT_VERSION,
@@ -93,7 +87,6 @@ export async function load(): Promise<LibraryData> {
       settings: { ...settings, ...decryptSecrets(parsed.secrets) }
     }
   } catch {
-    // First run, or a corrupt file — start clean rather than crashing the app.
     data = { version: CURRENT_VERSION, games: [], settings: { ...DEFAULT_SETTINGS } }
   }
   await fs.mkdir(artDir(), { recursive: true })
@@ -101,10 +94,7 @@ export async function load(): Promise<LibraryData> {
   return data
 }
 
-/**
- * Settings as the renderer sees them: keys replaced by whether each is set.
- * The renderer only ever writes keys, never reads them back.
- */
+// what the renderer gets: keys stripped, only whether each is set. never send getSettings()
 export function publicSettings(): Settings {
   const view: Settings = { ...data.settings, keysSet: {} }
   for (const key of SECRET_KEYS) {
@@ -114,6 +104,7 @@ export function publicSettings(): Settings {
   return view
 }
 
+// whitelist: a Game field missing here is silently dropped on the next load
 function normaliseGame(game: Partial<Game>): Game {
   return {
     id: game.id ?? `manual:${Math.random().toString(36).slice(2)}`,
@@ -123,6 +114,7 @@ function normaliseGame(game: Partial<Game>): Game {
     epicLaunchUri: game.epicLaunchUri,
     xboxAumid: game.xboxAumid,
     launchUri: game.launchUri,
+    launcher: game.launcher,
     installDir: game.installDir,
     exePath: game.exePath,
     args: game.args,
@@ -142,7 +134,11 @@ function normaliseGame(game: Partial<Game>): Game {
     playtimeSeconds: game.playtimeSeconds ?? 0,
     sessions: game.sessions ?? 0,
     lastPlayed: game.lastPlayed,
-    addedAt: game.addedAt ?? Date.now()
+    addedAt: game.addedAt ?? Date.now(),
+    preferredStore: game.preferredStore,
+    companions: game.companions?.filter((path) => typeof path === 'string'),
+    closeCompanions: game.closeCompanions,
+    afterExit: typeof game.afterExit === 'string' ? game.afterExit : undefined
   }
 }
 
@@ -163,7 +159,6 @@ export function getSettings(): Settings {
 }
 
 export function setSettings(patch: Partial<Settings>): Settings {
-  // keysSet is derived, never stored.
   const rest = { ...patch }
   delete rest.keysSet
   data.settings = { ...data.settings, ...rest }
@@ -195,12 +190,21 @@ export function removeGame(id: string): boolean {
   return true
 }
 
+// keeps this PC's keys; backups never carry them
+export function restoreLibrary(games: Array<Partial<Game>>, settings: Partial<Settings>): Promise<void> {
+  const next: Settings = { ...DEFAULT_SETTINGS, ...settings }
+  for (const key of SECRET_KEYS) next[key] = data.settings[key]
+  delete next.keysSet
+  data = { ...data, games: games.map(normaliseGame), settings: next }
+  return save()
+}
+
 export function replaceGames(games: Game[]): void {
   data.games = games
   save()
 }
 
-/** Serialised, debounced write so rapid updates don't interleave on disk. */
+// serialised + tmp/rename so writes never interleave or half-land
 export function save(): Promise<void> {
   writeQueue = writeQueue.then(async () => {
     const file = libraryFile()

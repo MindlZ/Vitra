@@ -4,22 +4,10 @@ import { runningStates } from './launch'
 import { getGame, getSettings } from './store'
 import type { Game } from '../shared/types'
 
-/*
- * Discord Rich Presence: while a game Vitra is tracking is running, your
- * Discord status shows it ("Playing Vitra", the game's name, time played,
- * its cover). Off by default (Settings → Connections).
- *
- * Talks to the Discord desktop app over its local pipe, never the network:
- * \\?\pipe\discord-ipc-N, frames of [opcode int32 LE][length int32 LE][JSON].
- * Connected only while there's something to show; closing the pipe is what
- * clears the status. If Discord isn't running it retries quietly.
- */
+// local pipe \\?\pipe\discord-ipc-N, frames: [op i32 LE][len i32 LE][json].
+// closing the pipe is what clears the status
 
-/**
- * The Discord application Vitra presents as, from discord.com/developers
- * (its name is the "Playing …" line; upload the logo as an art asset named
- * "vitra"). An id, not a secret. Empty turns the feature off.
- */
+// discord.com/developers app "Vitra" (logo uploaded as asset "vitra"). not a secret; '' = off
 export const DISCORD_CLIENT_ID = '1554504910563844198'
 
 const OP_HANDSHAKE = 0
@@ -43,9 +31,7 @@ let socket: Socket | undefined
 let ready = false
 let connecting = false
 let retryTimer: NodeJS.Timeout | undefined
-/** What should be showing; null = nothing. */
 let wanted: Activity | null = null
-/** What Discord was last told, to skip repeats. */
 let sent = ''
 
 export function discordConfigured(): boolean {
@@ -60,17 +46,13 @@ function frame(op: number, payload: unknown): Buffer {
   return Buffer.concat([header, body])
 }
 
-/** Discord wants 2–128 characters. */
+// Discord rejects < 2 or > 128 chars
 function fit(text: string): string {
   const trimmed = text.trim().slice(0, 128)
   return trimmed.length >= 2 ? trimmed : `${trimmed}  `
 }
 
-/**
- * A public URL Discord can fetch for the cover: Steam's header (the one
- * capsule every app has), else a remote cover the scanner found. Local-only
- * art can't be shown, so those fall back to Vitra's own logo.
- */
+// needs a public URL (Discord proxies it). header.jpg is the one capsule every app has
 function coverFor(game: Game): string | undefined {
   if (game.steamAppId) return `${STEAM_CDN}/${game.steamAppId}/header.jpg`
   if (game.coverUrl?.startsWith('https://')) return game.coverUrl
@@ -121,7 +103,6 @@ function scheduleRetry(): void {
   }, RETRY_MS)
 }
 
-/** Discord listens on the first free of discord-ipc-0…9. */
 function openPipe(index: number): Promise<Socket | undefined> {
   return new Promise((resolve) => {
     const pipe = createConnection(`\\\\?\\pipe\\discord-ipc-${index}`)
@@ -153,7 +134,7 @@ function listen(pipe: Socket): void {
       try {
         message = JSON.parse(body.toString('utf8'))
       } catch {
-        // Not ours to understand; skip it.
+        // not JSON, ignore
       }
 
       if (op === OP_PING) pipe.write(frame(OP_PONG, message))
@@ -184,7 +165,6 @@ async function connect(): Promise<void> {
     for (let index = 0; index < 10; index++) {
       const pipe = await openPipe(index)
       if (!pipe) continue
-      // Turned off, or the game closed, while we were looking.
       if (!wanted) {
         pipe.destroy()
         return
@@ -194,7 +174,6 @@ async function connect(): Promise<void> {
       pipe.write(frame(OP_HANDSHAKE, { v: 1, client_id: DISCORD_CLIENT_ID }))
       return
     }
-    // Discord isn't running.
     scheduleRetry()
   } finally {
     connecting = false
@@ -210,10 +189,7 @@ function sync(): void {
   else if (!connecting) void connect()
 }
 
-/**
- * Re-read what should be showing: the first game that's actually running
- * (its process seen, not just launched), if the setting is on.
- */
+// confirmed sessions only: launched isn't playing
 export function updatePresence(): void {
   const on = getSettings().discordPresence && discordConfigured()
   const session = on ? runningStates().find((state) => state.confirmed) : undefined

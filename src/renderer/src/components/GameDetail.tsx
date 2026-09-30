@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import {
+  AppWindow,
   ArrowLeft,
   Download,
   Eye,
@@ -7,12 +8,19 @@ import {
   FolderOpen,
   Image as ImageIcon,
   Play,
+  Plus,
   Star,
   Trash2,
   X
 } from 'lucide-react'
 import type { ArtKind } from '@shared/api'
-import type { Game, RunningState } from '@shared/types'
+import {
+  GAME_SOURCES,
+  type AchievementSummary,
+  type Game,
+  type GameSource,
+  type RunningState
+} from '@shared/types'
 import { useArt } from '../lib/art'
 import {
   formatDuration,
@@ -32,11 +40,13 @@ interface Props {
   session?: RunningState
   allTags: string[]
   onBack: () => void
-  /** Where Back goes: "Home", "All games", a tag… */
   backLabel: string
   onPlay: () => void
   onStopTracking: () => void
   onPatch: (changes: Partial<Game>) => void
+  onSetStore: (store: GameSource) => void
+  // after main changed the game itself (companion dialogs)
+  onRefresh: () => void
   onRemove: () => void
   onOpenFolder: () => void
   onPickArt: (kind: ArtKind) => void
@@ -109,7 +119,158 @@ function IconButton({
   )
 }
 
-/** Ticks once a second while a tracked session is confirmed running. */
+function fileName(path: string): string {
+  return path.split(/[\\/]/).pop() ?? path
+}
+
+// paths are picked in main's own dialog; this only asks
+function Companions({ game, onChanged }: { game: Game; onChanged: () => void }) {
+  const companions = game.companions ?? []
+  const after = (clear?: boolean): void => void window.launcher.setAfterExit(game.id, clear).then(onChanged)
+
+  return (
+    <div className="flex max-w-[460px] flex-col gap-2">
+      {companions.map((path, index) => (
+        <div key={path} className="glass-soft flex h-9 items-center gap-2 rounded-[10px] pr-1 pl-3">
+          <AppWindow className="h-3.5 w-3.5 shrink-0 text-muted" />
+          <span className="min-w-0 flex-1 truncate text-[12px] text-dim" title={path}>
+            {fileName(path)}
+          </span>
+          <button
+            onClick={() => void window.launcher.removeCompanion(game.id, index).then(onChanged)}
+            aria-label={`Remove ${fileName(path)}`}
+            className="flex h-7 w-7 items-center justify-center rounded-[8px] text-muted hover:text-ink"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      ))}
+      <button
+        onClick={() => void window.launcher.addCompanion(game.id).then(onChanged)}
+        className="glass-btn flex h-9 items-center gap-2 rounded-[10px] px-3 text-[12px] text-dim hover:text-ink"
+      >
+        <Plus className="h-3.5 w-3.5" />
+        Start a program with it
+      </button>
+      {companions.length > 0 && (
+        <button
+          role="switch"
+          aria-checked={Boolean(game.closeCompanions)}
+          onClick={() => onChangeClose(!game.closeCompanions)}
+          className="flex h-9 items-center justify-between rounded-[10px] px-3 text-[12px] text-dim hover:text-ink"
+        >
+          Close them afterwards
+          <span
+            className={`relative h-5 w-9 rounded-full transition-colors ${
+              game.closeCompanions ? 'bg-accent' : 'bg-white/12'
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 h-4 w-4 rounded-full bg-snow transition-[left] ${
+                game.closeCompanions ? 'left-[18px]' : 'left-0.5'
+              }`}
+            />
+          </span>
+        </button>
+      )}
+      {game.afterExit ? (
+        <div className="glass-soft flex h-9 items-center gap-2 rounded-[10px] pr-1 pl-3">
+          <span className="shrink-0 text-[12px] text-muted">Afterwards</span>
+          <span className="min-w-0 flex-1 truncate text-[12px] text-dim" title={game.afterExit}>
+            {fileName(game.afterExit)}
+          </span>
+          <button
+            onClick={() => after(true)}
+            aria-label="Remove the program run afterwards"
+            className="flex h-7 w-7 items-center justify-center rounded-[8px] text-muted hover:text-ink"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={() => after()}
+          className="glass-btn flex h-9 items-center gap-2 rounded-[10px] px-3 text-[12px] text-dim hover:text-ink"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Run something when it closes
+        </button>
+      )}
+    </div>
+  )
+
+  function onChangeClose(value: boolean): void {
+    void window.launcher.patchGame(game.id, { closeCompanions: value }).then(onChanged)
+  }
+}
+
+// any Steam copy of a merged game will do
+function Achievements({ game }: { game: Game }) {
+  const steamCopy = [game, ...(game.siblings ?? [])].find((copy) => copy.steamAppId)
+  const [summary, setSummary] = useState<AchievementSummary | null>(null)
+
+  useEffect(() => {
+    setSummary(null)
+    if (!steamCopy || !window.launcher.getAchievements) return
+    let alive = true
+    void window.launcher.getAchievements(steamCopy.id).then((result) => {
+      if (alive) setSummary(result)
+    })
+    return () => {
+      alive = false
+    }
+  }, [steamCopy?.id])
+
+  if (summary?.status === 'private') {
+    return <p className="mb-12 text-[12px] text-muted">Achievements private on Steam</p>
+  }
+  if (summary?.status !== 'ok' || !summary.total) return null
+  const share = summary.unlocked / summary.total
+
+  return (
+    <section className="mb-12">
+      <div className="mb-3 flex items-baseline gap-2.5">
+        <Heading>Achievements</Heading>
+        <span className="font-display text-[13px] font-medium tabular-nums text-muted">
+          {summary.unlocked} / {summary.total}
+        </span>
+      </div>
+      <div
+        role="meter"
+        aria-label="Achievements unlocked"
+        aria-valuemin={0}
+        aria-valuemax={summary.total}
+        aria-valuenow={summary.unlocked}
+        className="mb-5 h-1.5 max-w-[420px] overflow-hidden rounded-full bg-white/8"
+      >
+        <div className="h-full rounded-full bg-accent" style={{ width: `${share * 100}%` }} />
+      </div>
+      {summary.rarest.length > 0 && (
+        <div className="grid gap-3 sm:grid-cols-3">
+          {summary.rarest.map((achievement) => (
+            <div key={achievement.name} className="flex min-w-0 items-center gap-3" title={achievement.description}>
+              {achievement.icon ? (
+                <img src={achievement.icon} alt="" className="h-10 w-10 shrink-0 rounded-[8px]" />
+              ) : (
+                <div className="h-10 w-10 shrink-0 rounded-[8px] bg-white/8" />
+              )}
+              <div className="min-w-0">
+                <div className="truncate text-[12.5px] text-ink">{achievement.name}</div>
+                {achievement.percent !== undefined && (
+                  <div className="text-[11px] tabular-nums text-muted">
+                    {achievement.percent < 1 ? achievement.percent.toFixed(1) : Math.round(achievement.percent)}% of
+                    players
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
 function useElapsed(session?: RunningState): number {
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
@@ -131,6 +292,8 @@ export default function GameDetail({
   onPlay,
   onStopTracking,
   onPatch,
+  onSetStore,
+  onRefresh,
   onRemove,
   onOpenFolder,
   onPickArt,
@@ -140,8 +303,7 @@ export default function GameDetail({
   const elapsed = useElapsed(session)
   const [confirmRemove, setConfirmRemove] = useState(false)
   const hue = hueFor(game.name)
-  // Each store's URI opens its install prompt for anything not on disk:
-  // Steam's rungameid, Epic's ?action=install, GOG Galaxy's game page.
+  // each store's URI doubles as its install prompt
   const canInstall =
     !game.installed && Boolean(game.steamAppId || game.epicLaunchUri || game.launchUri)
 
@@ -153,7 +315,7 @@ export default function GameDetail({
     setViewing(null)
   }, [game.id])
 
-  // Rendered twice: once as the sky, once flipped as its reflection.
+  // rendered twice: sky + flipped reflection
   const sky = hero ? (
     <img src={hero} alt="" className="h-full w-full object-cover object-[50%_30%]" />
   ) : (
@@ -169,11 +331,8 @@ export default function GameDetail({
     <>
     <div className="animate-fade-up min-h-0 flex-1 overflow-y-auto">
       <div className="relative pb-8">
-        {/* The hero is the sky: it ends in a hard horizon at the cover's foot
-            and is mirrored below it, as still water. */}
         <div className="absolute inset-x-0 top-0 bottom-8">
           {sky}
-          {/* Darken the side the title sits on, and the top under the back button. */}
           <div className="absolute inset-0 bg-gradient-to-r from-base/90 via-base/45 to-base/5" />
           <div className="absolute inset-0 bg-gradient-to-b from-base/60 via-transparent to-transparent" />
           <div aria-hidden className="vitra-hero-reflection">
@@ -204,6 +363,7 @@ export default function GameDetail({
             <div className="min-w-0 flex-1 pb-4">
               <div className="mb-3 flex flex-wrap items-center gap-2">
                 <Chip>{sourceLabel(game.source)}</Chip>
+                {game.siblings?.map((copy) => <Chip key={copy.id}>{sourceLabel(copy.source)}</Chip>)}
                 {!game.installed && <Chip>Not installed</Chip>}
                 {session && (
                   <Chip tone="live">
@@ -268,12 +428,11 @@ export default function GameDetail({
           </div>
         </div>
 
-        {/* After the content so the horizon also crosses the cover's foot. The
-            reflection itself stays clean: no ripple bands on this page. */}
+        {/* after the content so the line also crosses the cover's foot */}
         <div className="vitra-horizon absolute inset-x-0 top-[calc(100%-2rem)]" />
       </div>
 
-      {/* Positioned so it paints above the reflections, which are. */}
+      {/* relative: paints above the (positioned) reflections */}
       <div className="relative px-8 pt-6 pb-12">
         <div className="mb-12 grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-7">
           <Stat label="Time played" value={formatPlaytime(game.playtimeSeconds)} />
@@ -288,6 +447,8 @@ export default function GameDetail({
             })}
           />
         </div>
+
+        <Achievements game={game} />
 
         {captures.length > 0 && (
           <section className="mb-12">
@@ -305,6 +466,33 @@ export default function GameDetail({
           <div>
             <Heading className="mb-3">Tags</Heading>
             <TagInput tags={game.tags} suggestions={allTags} onChange={(tags) => onPatch({ tags })} />
+
+            {game.siblings?.length ? (
+              <>
+                <Heading className="mt-11 mb-3">Launch from</Heading>
+                <div role="radiogroup" aria-label="Launch from" className="glass-soft inline-flex flex-wrap rounded-[11px] p-1">
+                  {[game, ...game.siblings]
+                    .sort((a, b) => GAME_SOURCES.indexOf(a.source) - GAME_SOURCES.indexOf(b.source))
+                    .map((copy) => {
+                      const selected = copy.id === game.id
+                      return (
+                        <button
+                          key={copy.id}
+                          role="radio"
+                          aria-checked={selected}
+                          onClick={() => !selected && onSetStore(copy.source)}
+                          title={copy.installed ? undefined : 'Not installed'}
+                          className={`h-9 rounded-[8px] px-5 text-[12.5px] transition-colors ${
+                            selected ? 'bg-white/12 text-ink' : 'text-dim hover:text-ink'
+                          } ${copy.installed ? '' : 'opacity-60'}`}
+                        >
+                          {sourceLabel(copy.source)}
+                        </button>
+                      )
+                    })}
+                </div>
+              </>
+            ) : null}
 
             <Heading className="mt-11 mb-3">Type</Heading>
             <div role="radiogroup" aria-label="Type" className="glass-soft inline-flex rounded-[11px] p-1">
@@ -325,6 +513,14 @@ export default function GameDetail({
                 )
               })}
             </div>
+
+            {/* renderer can hot-reload ahead of preload */}
+            {game.installed && 'addCompanion' in window.launcher && (
+              <>
+                <Heading className="mt-11 mb-3">With this game</Heading>
+                <Companions game={game} onChanged={onRefresh} />
+              </>
+            )}
 
             <Heading className="mt-11 mb-1">Details</Heading>
             <div>
@@ -397,7 +593,7 @@ export default function GameDetail({
       </div>
     </div>
 
-    {/* Outside the animated wrapper: its transform would trap `fixed`. */}
+    {/* outside the animated wrapper: its transform would trap `fixed` */}
     {viewing !== null && (
       <CaptureViewer
         captures={captures}

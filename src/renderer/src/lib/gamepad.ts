@@ -1,28 +1,20 @@
 import { useEffect, useRef } from 'react'
 
 /*
- * Controller support, as a thin layer over ordinary DOM focus: the d-pad (or
- * left stick) moves focus spatially to the nearest real control in that
- * direction, and the face buttons click things. Nothing in the UI has to know
- * about controllers beyond a few data attributes:
+ * data-nav-group     navigates as one box (a card)
+ * data-nav-primary   the control in a group that takes focus
+ * data-nav-skip      never a stop
+ * data-nav-x / -y    what X / Y press in the focused group
+ * data-nav-default   first landing spot
+ * data-nav-view      stepped by LB / RB
+ * data-nav-subview   stepped by LT / RT (big picture's store row)
+ * data-nav-dismiss   B sends Escape instead of going back
+ * data-nav-center    shelf: keep focus centred
+ * data-game-id       remembered so Back returns to the card
+ * aria-modal="true"  scopes navigation
  *
- *   data-nav-group    a unit that navigates as one box (a library card)
- *   data-nav-primary  the control inside a group that takes focus
- *   data-nav-skip     never a stop (a card's hover-only play/star buttons)
- *   data-nav-x / -y   what X / Y press inside the focused group
- *   data-nav-default  where focus lands when nothing is focused yet
- *   data-nav-view     sidebar rows (or a dialog's sections), stepped through by LB / RB
- *   data-nav-dismiss  an open menu: B sends it Escape instead of stepping back
- *   data-nav-center   a horizontal shelf: focus scrolls the item to its centre
- *
- * View toggles big picture mode.
- *   data-game-id      remembered, so focus returns to the card after Back
- *
- * A dialog marked aria-modal="true" keeps navigation inside it.
- *
- * Standard mapping (what Chromium reports for XInput pads):
- * 0 A, 1 B, 2 X, 3 Y, 4 LB, 5 RB, 8 View, 9 Menu, 12-15 d-pad. The Xbox
- * (guide) button is reserved by Windows for the Game Bar and never arrives.
+ * XInput via Chromium: 0 A, 1 B, 2 X, 3 Y, 4 LB, 5 RB, 6 LT, 7 RT, 8 View, 9 Menu, 12-15 d-pad.
+ * guide never arrives (Game Bar has it)
  */
 
 type Dir = 'up' | 'down' | 'left' | 'right'
@@ -33,27 +25,24 @@ const X = 2
 const Y = 3
 const LB = 4
 const RB = 5
+const LT = 6
+const RT = 7
 const VIEW = 8
 const START = 9
 const DPAD: Record<number, Dir> = { 12: 'up', 13: 'down', 14: 'left', 15: 'right' }
 
-/** Stick travel before it counts as a direction. */
 const DEADZONE = 0.5
-/** Hold a direction: one step, a pause, then a steady repeat. */
 const REPEAT_DELAY = 380
 const REPEAT_EVERY = 115
-/** Right stick scroll speed, px per frame at full tilt. */
+// px per frame at full tilt
 const SCROLL_SPEED = 22
 
 const FOCUSABLE =
   'button, a[href], input:not([type="hidden"]), select, textarea, [tabindex]:not([tabindex="-1"])'
 
 interface Handlers {
-  /** B: close whatever is on top, or step back towards Home. */
   onBack: () => void
-  /** Menu / Start. */
   onStart: () => void
-  /** View (the two-squares button): toggles big picture mode. */
   onView?: () => void
 }
 
@@ -61,11 +50,8 @@ function groupOf(el: Element | null): HTMLElement | null {
   return (el?.closest('[data-nav-group]') as HTMLElement | null) ?? null
 }
 
-/**
- * The box navigation measures. A card's group is used rather than its button
- * because off-screen cards are content-visibility skipped: measuring inside
- * them would force layout of every card on each press.
- */
+// measure the group, not the button: off-screen cards are content-visibility
+// skipped, and measuring inside them forces layout of every card per press
 function navBox(el: HTMLElement): DOMRect {
   return (groupOf(el) ?? el).getBoundingClientRect()
 }
@@ -79,7 +65,6 @@ function navigable(root: HTMLElement): HTMLElement[] {
   return [...root.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((el) => {
     if (el.matches(':disabled')) return false
     if (el.closest('[data-nav-skip], [inert], [aria-hidden="true"]')) return false
-    // In a group, only its primary control is a stop.
     const group = groupOf(el)
     if (group && group.querySelector('[data-nav-primary]') && !el.hasAttribute('data-nav-primary'))
       return false
@@ -88,16 +73,11 @@ function navigable(root: HTMLElement): HTMLElement[] {
   })
 }
 
-/** Gap between two ranges on one axis; 0 if they overlap. */
 function gap(a0: number, a1: number, b0: number, b1: number): number {
   return Math.max(0, b0 - a1, a0 - b1)
 }
 
-/**
- * Lower is better; Infinity means "not in that direction". Distance along the
- * direction of travel, plus a heavy penalty for being off to the side, so the
- * card directly below beats a nearer one diagonally across.
- */
+// lower wins. side offset weighs 3x so straight down beats a nearer diagonal
 function score(from: DOMRect, to: DOMRect, dir: Dir): number {
   const fx = from.left + from.width / 2
   const fy = from.top + from.height / 2
@@ -122,17 +102,15 @@ function score(from: DOMRect, to: DOMRect, dir: Dir): number {
 
 function focusEl(el: HTMLElement | null | undefined): void {
   if (!el) return
-  // focusVisible makes :focus-visible match even though no key was pressed.
+  // focusVisible: otherwise :focus-visible won't match without a key press
   el.focus({ preventScroll: true, focusVisible: true } as FocusOptions)
   const box = groupOf(el) ?? el
-  // A shelf keeps the focused cover centred rather than creeping to the edge.
   const inline = box.closest('[data-nav-center]') ? 'center' : 'nearest'
   box.scrollIntoView({ block: 'nearest', inline, behavior: 'smooth' })
 }
 
 function setNativeValue(el: HTMLInputElement | HTMLSelectElement, value: string, event: string): void {
-  // React tracks the value itself; going through the prototype setter makes
-  // it see the change when the event fires.
+  // prototype setter, or React's value tracking ignores the event
   const proto = el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype
   Object.getOwnPropertyDescriptor(proto, 'value')?.set?.call(el, value)
   el.dispatchEvent(new Event(event, { bubbles: true }))
@@ -145,7 +123,6 @@ function isTextEntry(el: Element): boolean {
   )
 }
 
-/** The scrollable ancestor the right stick should move. */
 function scroller(from: Element | null): HTMLElement | null {
   const scrolls = (el: Element): el is HTMLElement =>
     el instanceof HTMLElement &&
@@ -155,7 +132,6 @@ function scroller(from: Element | null): HTMLElement | null {
   for (let el = from; el && el !== document.body; el = el.parentElement) {
     if (scrolls(el)) return el
   }
-  // Nothing focused inside a scroller: the main pane's own scroller.
   return [...document.querySelectorAll('main .overflow-y-auto')].find(scrolls) ?? null
 }
 
@@ -175,7 +151,6 @@ export function useGamepad(handlers: Handlers): void {
       return el instanceof HTMLElement && el !== document.body && scope().contains(el) ? el : null
     }
 
-    /** Somewhere sensible to start: the last card, a marked default, or the first stop. */
     const land = (): void => {
       const root = scope()
       const remembered =
@@ -184,7 +159,6 @@ export function useGamepad(handlers: Handlers): void {
           `[data-game-id="${CSS.escape(lastGameId)}"] [data-nav-primary]`
         )
       const stops = navigable(root)
-      // A dialog (big picture) can mark its own default too.
       const fallback =
         root.querySelector<HTMLElement>('[data-nav-default]') ??
         (root === document.body ? stops.find((el) => el.closest('main')) : undefined)
@@ -195,7 +169,6 @@ export function useGamepad(handlers: Handlers): void {
       const from = current()
       if (!from) return land()
 
-      // A slider or dropdown takes left/right as a value change.
       if ((dir === 'left' || dir === 'right') && from instanceof HTMLInputElement && from.type === 'range') {
         const step = Number(from.step) || 1
         const next = Math.min(
@@ -228,7 +201,7 @@ export function useGamepad(handlers: Handlers): void {
       if (id) lastGameId = id
 
       if (el instanceof HTMLSelectElement) {
-        // The native popup can't be driven by a pad, so A steps through options.
+        // native popup can't be driven by a pad
         const next = (el.selectedIndex + 1) % el.options.length
         setNativeValue(el, el.options[next].value, 'change')
       } else if (isTextEntry(el)) {
@@ -245,10 +218,8 @@ export function useGamepad(handlers: Handlers): void {
       groupOf(el)?.querySelector<HTMLElement>(`[${attr}]`)?.click()
     }
 
-    // The views in front of you: the sidebar, or a dialog's own sections
-    // (Settings), since a modal scopes which rows count.
-    const cycleView = (step: number): void => {
-      const rows = [...scope().querySelectorAll<HTMLElement>('[data-nav-view]')]
+    const cycleView = (step: number, attr = 'data-nav-view'): void => {
+      const rows = [...scope().querySelectorAll<HTMLElement>(`[${attr}]`)]
       if (!rows.length) return
       const at = rows.findIndex((row) => row.getAttribute('aria-current') === 'page')
       rows[(at + step + rows.length) % rows.length].click()
@@ -260,13 +231,12 @@ export function useGamepad(handlers: Handlers): void {
         el.blur()
         return
       }
-      // An open menu (Dropdown) closes itself rather than the view behind it.
       if (el?.closest('[data-nav-dismiss]')) {
         el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
         return
       }
       latest.current.onBack()
-      // Once React has closed whatever it was, put focus back on the card.
+      // two frames: after React has closed whatever it was
       requestAnimationFrame(() => requestAnimationFrame(() => current() || land()))
     }
 
@@ -278,6 +248,8 @@ export function useGamepad(handlers: Handlers): void {
       else if (button === Y) pressInGroup('data-nav-y')
       else if (button === LB) cycleView(-1)
       else if (button === RB) cycleView(1)
+      else if (button === LT) cycleView(-1, 'data-nav-subview')
+      else if (button === RT) cycleView(1, 'data-nav-subview')
       else if (button === START) latest.current.onStart()
       else if (button === VIEW) latest.current.onView?.()
     }
@@ -289,8 +261,7 @@ export function useGamepad(handlers: Handlers): void {
       const pad = [...navigator.getGamepads()].find((p) => p?.connected)
       if (!pad) return
 
-      // While the screen saver is up, input only wakes it: the press that
-      // wakes it mustn't also click whatever was focused underneath.
+      // the press that wakes the screen saver mustn't also click something
       const idle = document.documentElement.dataset.idle === 'true'
 
       let dir: Dir | null = null
@@ -311,8 +282,6 @@ export function useGamepad(handlers: Handlers): void {
       if (dir) any = true
 
       if (idle) {
-        // Held through the wake-up, so the direction doesn't fire on release
-        // of the screen saver either.
         held = dir
       } else if (dir !== held) {
         held = dir
@@ -332,7 +301,7 @@ export function useGamepad(handlers: Handlers): void {
 
       if (any) {
         document.documentElement.dataset.input = 'gamepad'
-        // The screen saver's idle timer listens for this (lib/idle.ts).
+        // idle.ts listens for this
         if (time - activityAt > 250) {
           activityAt = time
           window.dispatchEvent(new Event('vitra:activity'))
@@ -340,8 +309,7 @@ export function useGamepad(handlers: Handlers): void {
       }
     }
 
-    // Polling only runs while a pad is connected. Chromium only reports a pad
-    // after its first button press, which is also when this fires.
+    // Chromium only reports a pad after its first button press
     const start = (): void => {
       if (!frame) frame = requestAnimationFrame(poll)
     }
@@ -352,7 +320,6 @@ export function useGamepad(handlers: Handlers): void {
       pressed = []
       held = null
     }
-    // Any mouse use hands the UI back to the pointer (and shows the cursor).
     const toPointer = (): void => {
       if (document.documentElement.dataset.input === 'gamepad')
         document.documentElement.dataset.input = 'pointer'

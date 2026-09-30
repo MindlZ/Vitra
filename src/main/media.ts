@@ -2,13 +2,6 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'child_process'
 import script from './media.ps1?raw'
 import type { MediaCommand, MediaState } from '../shared/types'
 
-/**
- * Now playing, from Windows' media session (see media.ps1). One hidden
- * PowerShell process runs for the life of the app once Home first asks; it
- * polls twice a second and takes play/pause/skip commands on stdin. Started
- * lazily so nobody pays for it until Home is shown.
- */
-
 const COMMANDS: MediaCommand[] = ['toggle', 'next', 'previous']
 const MAX_RESTARTS = 5
 
@@ -47,7 +40,7 @@ function handle(line: string): void {
 function start(): void {
   if (process.platform !== 'win32' || child || stopping) return
 
-  // -EncodedCommand takes UTF-16LE base64, which sidesteps every quoting issue.
+  // UTF-16LE base64: no quoting problems
   const encoded = Buffer.from(script, 'utf16le').toString('base64')
   const proc = spawn(
     'powershell.exe',
@@ -70,8 +63,7 @@ function start(): void {
 
   proc.stderr.setEncoding('utf8')
   proc.stderr.on('data', (chunk: string) => {
-    // Progress records arrive as CLIXML (the script silences them, but a
-    // profile or policy can bring them back); they're noise.
+    // CLIXML progress records: noise
     const text = chunk.trim()
     if (text && !text.includes('CLIXML') && !text.startsWith('<Objs')) console.warn('[media]', text)
   })
@@ -103,7 +95,7 @@ export function onMediaChange(listener: (state: MediaState) => void): () => void
 
 export function stopMedia(): void {
   stopping = true
-  // Closing stdin ends the script's loop; kill is the backstop.
+  // closing stdin ends the script's loop
   child?.stdin.end()
   child?.kill()
   child = undefined

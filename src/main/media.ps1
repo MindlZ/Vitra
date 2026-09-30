@@ -1,22 +1,12 @@
-# Now-playing bridge for Vitra's Home screen.
-#
-# Reads Windows' media session (the same source as the volume flyout, so it
-# covers Spotify, browsers and most players) and writes one JSON object per
-# line to stdout. Reads commands - toggle, next, previous - one per line from
-# stdin. Exits when stdin closes, so it can't outlive the app.
-#
-# Lines:
-#   {"type":"state", ...}   whenever anything but the artwork changes
-#   {"type":"art", key, art} when a new track's artwork has been read
-# Artwork is sent separately so the frequent state line stays small.
+# JSON lines out (state, and art on its own line to keep state small),
+# toggle/next/previous lines in. exits when stdin closes.
 
 $ErrorActionPreference = 'Stop'
-# Otherwise module loading writes progress records to stderr as CLIXML.
+# else progress records land on stderr as CLIXML
 $ProgressPreference = 'SilentlyContinue'
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 Add-Type -AssemblyName System.Runtime.WindowsRuntime
 
-# WinRT async -> .NET Task, so PowerShell can wait on it.
 $asTask = [System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object {
   $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and
   $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1'
@@ -46,9 +36,8 @@ try {
   exit 1
 }
 
-# The thumbnail stream arrives as a bare COM object, which PowerShell can't
-# bind to a method overload or read properties from directly. Going through
-# reflection with the interface types makes .NET do the cast.
+# WinRT objects arrive as bare __ComObjects in PS 5.1: no methods or props.
+# reflection via the interface types makes .NET do the cast
 $AsStreamForRead = [System.IO.WindowsRuntimeStreamExtensions].GetMethod(
   'AsStreamForRead', [Type[]]@([Windows.Storage.Streams.IInputStream]))
 $ContentTypeProp = [Windows.Storage.Streams.IContentTypeProvider].GetProperty('ContentType')
@@ -66,7 +55,7 @@ function Read-Art($reference) {
     if (-not $type) { $type = 'image/png' }
     return "data:$type;base64," + [Convert]::ToBase64String($memory.ToArray())
   } finally {
-    # The COM object has no callable Dispose; the .NET wrapper releases it.
+    # the COM object has no callable Dispose; the wrapper does it
     if ($source) { $source.Dispose() }
   }
 }
@@ -90,8 +79,7 @@ function Get-State {
     $script:artDone = $false
     $script:artTries = 0
   }
-  # Players often publish the title a moment before the artwork, so keep
-  # trying for a few polls rather than giving up on the first miss.
+  # players often publish the title before the artwork
   if (-not $script:artDone -and $media -and $media.Thumbnail -and $script:artTries -lt 6) {
     $script:artTries++
     try {
@@ -140,11 +128,9 @@ while ($true) {
       }
     } catch {}
     $pending = $stdin.ReadLineAsync()
-    # Report the result of the command straight away.
     $tick = 0
   }
 
-  # Poll twice a second; check for commands every 100 ms.
   if ($tick % 5 -eq 0) {
     try {
       $json = (Get-State) | ConvertTo-Json -Compress

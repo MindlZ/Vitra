@@ -3,6 +3,7 @@ import type { ArtKind } from '@shared/api'
 
 const cache = new Map<string, string | null>()
 const listeners = new Map<string, Set<() => void>>()
+const pending = new Set<string>()
 
 const MAX_CONCURRENT = 5
 let active = 0
@@ -34,17 +35,22 @@ export function artUrl(file: string): string {
   return `applib://art/${encodeURIComponent(file)}`
 }
 
-/** Drop a cached result so the next render re-resolves it (after the user sets art). */
+// pairs with main's retryMissingArt; without it new covers needed a restart
+export function forgetMissingArt(): void {
+  for (const [key, value] of cache) {
+    if (value !== null) continue
+    cache.delete(key)
+    notify(key)
+  }
+}
+
 export function invalidateArt(gameId: string, kind: ArtKind): void {
   const key = `${gameId}:${kind}`
   cache.delete(key)
   notify(key)
 }
 
-/**
- * Resolve one piece of art, asking the main process to download and cache it on
- * first use. Requests are queued so a big library doesn't open 200 sockets.
- */
+// queued (MAX_CONCURRENT) so a big library doesn't open 200 sockets
 export function useArt(gameId: string, kind: ArtKind, enabled = true): string | null {
   const key = `${gameId}:${kind}`
   const [value, setValue] = useState<string | null>(() => cache.get(key) ?? null)
@@ -53,27 +59,34 @@ export function useArt(gameId: string, kind: ArtKind, enabled = true): string | 
     if (!enabled) return
     let alive = true
 
+    const request = (): void => {
+      if (pending.has(key)) return
+      pending.add(key)
+      schedule(async () => {
+        try {
+          if (cache.has(key)) return
+          const file = await window.launcher.ensureArt(gameId, kind)
+          cache.set(key, file ? artUrl(file) : null)
+        } catch {
+          cache.set(key, null)
+        } finally {
+          pending.delete(key)
+        }
+        notify(key)
+      })
+    }
+    // a dropped entry gets re-requested here
     const sync = (): void => {
-      if (alive) setValue(cache.get(key) ?? null)
+      if (!alive) return
+      if (cache.has(key)) return setValue(cache.get(key) ?? null)
+      setValue(null)
+      request()
     }
     const set = listeners.get(key) ?? new Set()
     set.add(sync)
     listeners.set(key, set)
 
-    if (cache.has(key)) {
-      sync()
-    } else {
-      schedule(async () => {
-        if (cache.has(key)) return
-        try {
-          const file = await window.launcher.ensureArt(gameId, kind)
-          cache.set(key, file ? artUrl(file) : null)
-        } catch {
-          cache.set(key, null)
-        }
-        notify(key)
-      })
-    }
+    sync()
 
     return () => {
       alive = false

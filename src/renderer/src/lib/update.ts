@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react'
 import type { UpdateState } from '@shared/types'
 
-/** Where updating stands, live. Null until the first answer from main. */
 export function useUpdate(): UpdateState | null {
   const [state, setState] = useState<UpdateState | null>(null)
 
   useEffect(() => {
-    // Guarded: a renderer can hot-reload ahead of the preload that adds these.
+    // renderer can hot-reload ahead of preload
     if (!window.launcher.getUpdate) return
     let alive = true
     void window.launcher.getUpdate().then((next) => alive && setState(next))
@@ -20,7 +19,6 @@ export function useUpdate(): UpdateState | null {
   return state
 }
 
-/** Settings' status line. Short on purpose: a label, not an explanation. */
 export function describeUpdate(state: UpdateState): string {
   switch (state.status) {
     case 'unavailable':

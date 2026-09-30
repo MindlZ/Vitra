@@ -2,12 +2,6 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ChevronLeft, ChevronRight, FolderOpen, Play, X } from 'lucide-react'
 import type { Capture } from '@shared/types'
 
-/*
- * A game's screenshots and clips (see main/captures.ts for where they come
- * from). The page shows a grid only when there's something in it; a tile
- * opens the viewer, which steps through them all.
- */
-
 const captureUrl = (capture: Capture): string => `applib://capture/${capture.id}`
 const thumbUrl = (capture: Capture): string => `applib://capture/${capture.id}/thumb`
 
@@ -27,17 +21,13 @@ function formatTaken(ms: number): string {
   })
 }
 
-/**
- * The game's captures, re-read when a session ends (screenshots taken while
- * playing show up on return) and when the window regains focus.
- */
+// re-read on session end and window focus: new screenshots show up on return
 export function useCaptures(gameId: string, playing: boolean): Capture[] {
-  // Tagged with the game, so a re-read doesn't blank the grid, but another
-  // game's captures never show on this page while its own load.
+  // tagged by game: a re-read doesn't blank the grid, and another game's never flash up
   const [state, setState] = useState<{ gameId: string; list: Capture[] } | null>(null)
 
   useEffect(() => {
-    // Guarded: an older preload (before a main-process restart) lacks it.
+    // renderer can hot-reload ahead of preload
     if (!window.launcher.listCaptures) return
     let alive = true
     const load = (): void => {
@@ -76,7 +66,6 @@ function Thumb({ capture }: { capture: Capture }) {
   )
 }
 
-/** Two rows or so at first; the rest on request. */
 const FIRST_SHOWN = 8
 
 export function CaptureGrid({
@@ -143,11 +132,7 @@ function StepButton({
   )
 }
 
-/**
- * Full view, below the title bar. Arrows step, Escape (or B) closes. It is
- * rendered outside the page's animated wrapper: a transformed ancestor would
- * make `fixed` relative to it.
- */
+// must render outside GameDetail's animated wrapper: a transformed ancestor traps `fixed`
 export function CaptureViewer({
   captures,
   index,
@@ -168,14 +153,14 @@ export function CaptureViewer({
   latest.current = { step, onClose }
 
   useEffect(() => {
-    // Capture phase, so Escape closes this and not the game page behind it.
+    // capture phase, so Escape doesn't also close the game page
     const onKey = (event: KeyboardEvent): void => {
-      // Settings (Start) can open above; its keys are its own.
+      // Settings can open above this
       const modals = document.querySelectorAll('[aria-modal="true"]')
       if (modals[modals.length - 1] !== root.current) return
 
       if (event.key === 'Escape') latest.current.onClose()
-      // A focused video uses the arrows to seek.
+      // a focused video seeks with the arrows
       else if (event.target instanceof HTMLVideoElement) return
       else if (event.key === 'ArrowLeft') latest.current.step(-1)
       else if (event.key === 'ArrowRight') latest.current.step(1)
@@ -196,7 +181,6 @@ export function CaptureViewer({
       aria-modal="true"
       aria-label="Captures"
       data-appearance="dark"
-      // B on a controller sends Escape here rather than leaving the page.
       data-nav-dismiss
       className="animate-fade-up fixed inset-x-0 top-[52px] bottom-0 z-40 flex flex-col bg-black/82 backdrop-blur-md"
       onClick={(event) => {

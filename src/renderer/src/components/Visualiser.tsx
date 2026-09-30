@@ -5,42 +5,23 @@ interface Props {
   className?: string
 }
 
-/** Horizon position, as a fraction of the canvas height. */
 const HORIZON = 0.68
 const BAR = 4
 const GAP = 4
-/** Per-frame fall-off; rises are instant so beats land. */
+// per-frame fall-off; rises are instant so beats land
 const DECAY = 0.88
 
-/** Waits between failed connection attempts: quick at first, then patient. */
 const RETRY_MS = [1000, 2000, 4000, 8000, 15000]
-/** Let Windows finish switching devices before capturing the new one. */
 const DEVICE_SETTLE_MS = 800
-/** Silence this long on a live capture makes the watchdog try a fresh one. */
 const SILENT_MS = 5000
-/** How often the watchdog may reconnect during silence, backing off to the last. */
 const WATCHDOG_MS = [15000, 30000, 60000]
 
-/**
- * Asks the main process for Windows loopback audio (see registerAudioCapture)
- * and returns an analyser on it, or null if that isn't available. Only the
- * frequency levels are ever read; the stream isn't played or stored.
- *
- * Loopback captures the output device that was the default when it started,
- * so switching (headset to speakers) can break it three ways, all handled:
- *   - the track ends: reconnect;
- *   - a reconnect fails mid-switch: keep retrying with backoff, never give up;
- *   - the track stays live but hears only the old, now-silent device: a
- *     `devicechange` reconnects at once, and a slow watchdog reconnects after
- *     sustained silence in case Windows didn't announce the change.
- */
-/*
- * One capture for every visualiser on screen. The screen saver fades in over
- * Home, so two visualisers can be mounted at once; they share this analyser
- * rather than each opening its own loopback. The last one to leave closes it
- * after a grace period, so a hand-off (Home to the screen saver and back)
- * doesn't reconnect.
- */
+// loopback sticks to the device it started on. switching outputs can:
+// end the track (reconnect), fail mid-switch (retry forever with backoff), or
+// keep a live track that hears only the old device (devicechange + silence watchdog)
+
+// one capture shared by every visualiser (the saver fades in over Home, so two can
+// be mounted). released after a grace period so a hand-off doesn't reconnect
 const analyser: { current: AnalyserNode | null } = { current: null }
 let users = 0
 let stopCapture: (() => void) | null = null
@@ -53,8 +34,7 @@ function startCapture(): () => void {
   let context: AudioContext | undefined
   let retry: ReturnType<typeof setTimeout> | undefined
   let failures = 0
-  // Bumped on every (re)connect, so a slow attempt that loses the race to a
-  // newer one throws its stream away instead of overwriting it.
+  // a slow attempt that loses the race throws its stream away
   let generation = 0
 
   const release = (): void => {
@@ -78,8 +58,7 @@ function startCapture(): () => void {
         video: { width: 1, height: 1, frameRate: 1 },
         audio: true
       })
-      // Video is only there because the API requires it; stopping it leaves
-      // the audio running (checked against live loopback capture).
+      // video is required by the API; stopping it keeps audio running (verified)
       next.getVideoTracks().forEach((track) => track.stop())
       const [track] = next.getAudioTracks()
       if (cancelled || attempt !== generation) {
@@ -98,28 +77,22 @@ function startCapture(): () => void {
       const node = context.createAnalyser()
       node.fftSize = 2048
       node.smoothingTimeConstant = 0.72
-      // Not connected to the destination: that would play the audio twice.
+      // not to destination: that would play the audio twice
       context.createMediaStreamSource(stream).connect(node)
       analyser.current = node
       failures = 0
     } catch (err) {
       if (cancelled || attempt !== generation) return
-      // The visualiser shows its idle swell meanwhile, so this is only a note.
-      // A main process started before registerAudioCapture() lands here.
       console.warn('[visualiser] no system audio, retrying:', (err as Error).message)
       schedule(RETRY_MS[Math.min(failures++, RETRY_MS.length - 1)])
     }
   }
 
-  // Windows announces output changes (switching default, plugging a headset
-  // in or out) as a device change. Several can arrive in a burst; one
-  // reconnect after they settle is enough.
+  // arrives in bursts; one reconnect once they settle
   const onDeviceChange = (): void => schedule(DEVICE_SETTLE_MS)
   navigator.mediaDevices.addEventListener('devicechange', onDeviceChange)
 
-  // Safety net for a switch Windows didn't announce: a live capture that
-  // has heard nothing for a while gets replaced. Rate-limited with backoff,
-  // so real silence (nothing playing) costs a reconnect a minute at most.
+  // for switches Windows doesn't announce. backed off: real silence costs <= 1 reconnect/min
   let heardAt = performance.now()
   let watchdogAt = performance.now()
   let watchdogStep = 0
@@ -173,12 +146,6 @@ function useSystemAudio(): RefObject<AnalyserNode | null> {
   return analyser
 }
 
-/**
- * The waterline, live: bars rise from a horizon with the bass at the centre,
- * like the sun's column on the wallpaper's water, and are mirrored below with
- * ripples cut through the reflection. With nothing playing it settles into a
- * slow swell rather than a dead line.
- */
 export default function Visualiser({ className = '' }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const analyser = useSystemAudio()
@@ -209,7 +176,6 @@ export default function Visualiser({ className = '' }: Props) {
     observer.observe(canvas)
     resize()
 
-    // Canvas can't see CSS variables; re-read them when the palette changes.
     let colours = readPalette(canvas)
     const onPalette = (): void => {
       colours = readPalette(canvas)
@@ -219,7 +185,7 @@ export default function Visualiser({ className = '' }: Props) {
     const draw = (time: number): void => {
       frame = requestAnimationFrame(draw)
       const node = analyser.current
-      // Idle, the swell only needs half the frame rate.
+      // idle swell: half frame rate is plenty
       if (!node && tick++ % 2) return
 
       const half = levels.length
@@ -228,7 +194,7 @@ export default function Visualiser({ className = '' }: Props) {
         node.getByteFrequencyData(bins)
       }
 
-      // Log-spaced bands from ~40 Hz to ~14 kHz, bass at the centre.
+      // log bands ~40Hz-14kHz, bass in the middle
       const lo = 2
       const hi = Math.min(bins.length || 1024, 660)
       let loud = 0
@@ -239,7 +205,7 @@ export default function Visualiser({ className = '' }: Props) {
           const b = Math.max(a + 1, Math.floor(lo * Math.pow(hi / lo, (i + 1) / half)))
           let sum = 0
           for (let k = a; k < b; k++) sum += bins[k]
-          // Treble reads quieter than it sounds; lift it a little.
+          // treble reads quieter than it sounds
           target = Math.pow(sum / (b - a) / 255, 1.5) * (1 + (i / half) * 0.6)
           loud = Math.max(loud, target)
         }
@@ -265,7 +231,6 @@ export default function Visualiser({ className = '' }: Props) {
           let v = Math.min(1, levels[i])
           if (swell) v = Math.max(v, 0.035 + 0.03 * Math.sin(time / 700 + i * 0.32))
           const h = Math.max(2, v * maxBar)
-          // Brightest in the middle, fading toward the edges like the sun's glint.
           ctx.globalAlpha = (1 - (i / half) * 0.7) * (reflect ? 0.3 : 1)
           const offset = i * (BAR + GAP) + GAP / 2
           for (const x of [cx + offset, cx - offset - BAR]) {
@@ -280,7 +245,7 @@ export default function Visualiser({ className = '' }: Props) {
       }
       ctx.globalAlpha = 1
 
-      // Ripples: bands cut out of the reflection, widening with distance.
+      // ripples cut out of the reflection
       ctx.globalCompositeOperation = 'destination-out'
       for (let y = horizon + 4, gap = 2; y < height; y += gap + 1.5, gap += 0.6) {
         ctx.fillRect(0, y, width, 1.5)

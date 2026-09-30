@@ -1,19 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-/** Mouse jitter under this many pixels isn't someone using the app. */
+// px; less is mouse jitter
 const MOVE_THRESHOLD = 6
 
-/**
- * The screen saver's clock: true after `minutes` without input in Vitra's
- * window. Input is the mouse (moved, pressed, wheeled), the keyboard, and the
- * controller (lib/gamepad.ts fires `vitra:activity`). A hidden window (a game
- * in front, minimised to the tray) doesn't count down; the timer restarts
- * when it's shown again. `blocked` pauses it (the splash, an open dialog).
- *
- * While idle it marks <html data-idle="true">, which the gamepad layer reads
- * to swallow the press that wakes it, and it eats the waking key here, so
- * waking never also presses a button or closes a page behind the saver.
- */
+// data-idle on <html> lets gamepad.ts swallow the waking press; the waking key is eaten here
 export function useIdle(
   minutes: number,
   blocked: boolean
@@ -66,7 +56,7 @@ export function useIdle(
     window.addEventListener('mousemove', onMove, { passive: true })
     window.addEventListener('pointerdown', activity, true)
     window.addEventListener('wheel', activity, { passive: true })
-    // Capture, so it runs before any other key handler can act on it.
+    // capture: before any other key handler sees it
     window.addEventListener('keydown', onKey, true)
     window.addEventListener('vitra:activity', activity)
     document.addEventListener('visibilitychange', onVisibility)
@@ -83,8 +73,7 @@ export function useIdle(
     }
   }, [minutes, blocked])
 
-  // A dialog opening ends an idle spell. (Not `minutes`: with the timer off, a
-  // preview from Settings should still be able to show the saver.)
+  // not on `minutes`: the Settings preview must work with the timer off
   useEffect(() => {
     if (blocked && idleNow.current) setIdle(false)
   }, [blocked])

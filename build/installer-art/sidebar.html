@@ -1,10 +1,5 @@
 <!doctype html>
-<!--
-  The installer's welcome/finish sidebar (164 x 314, NSIS's size at 100%):
-  the splash's last frame, the V lit in front of the risen sun on the
-  waterline. Rendered to build/installerSidebar.bmp by render.ps1.
-  Flat #120b17 at every edge, so it meets the page's MUI_BGCOLOR seamlessly.
--->
+<!-- 164x314 (NSIS at 100%). edges must stay exactly #120b17 = MUI_BGCOLOR -->
 <html>
   <head>
     <meta charset="utf-8" />
@@ -25,7 +20,7 @@
         width: 210px;
         height: 170px;
         translate: -50% -50%;
-        background: radial-gradient(50% 50% at 50% 50%, rgb(255 110 203 / 0.34), rgb(255 110 203 / 0) 70%);
+        background: radial-gradient(50% 50% at 50% 50%, rgb(255 132 130 / 0.34), rgb(255 132 130 / 0) 70%);
       }
       .sky {
         position: absolute;
@@ -48,13 +43,13 @@
         background: radial-gradient(
           circle at 50% 30%,
           #fffafd 0%,
-          color-mix(in srgb, rgb(255 190 232) 60%, white) 38%,
-          color-mix(in srgb, #ff6ecb 60%, white) 72%,
-          #ff6ecb 100%
+          color-mix(in srgb, rgb(253 205 203) 60%, white) 38%,
+          color-mix(in srgb, #ff8482 60%, white) 72%,
+          #ff8482 100%
         );
         box-shadow:
-          0 0 30px 4px rgb(255 110 203 / 0.55),
-          0 0 70px 18px rgb(255 110 203 / 0.2);
+          0 0 30px 4px rgb(255 132 130 / 0.55),
+          0 0 70px 18px rgb(255 132 130 / 0.2);
       }
       .mark {
         position: absolute;
@@ -62,7 +57,7 @@
         bottom: -4px;
         width: 84px;
         margin-left: -42px;
-        filter: drop-shadow(0 0 12px rgb(255 110 203 / 0.55));
+        filter: drop-shadow(0 0 12px rgb(255 132 130 / 0.55));
       }
       .water {
         position: absolute;
@@ -89,12 +84,12 @@
         background: linear-gradient(
           90deg,
           transparent 0%,
-          rgb(255 190 232 / 0.55) 30%,
-          color-mix(in srgb, rgb(255 190 232) 55%, white 45%) 50%,
-          rgb(255 190 232 / 0.55) 70%,
+          rgb(253 205 203 / 0.55) 30%,
+          color-mix(in srgb, rgb(253 205 203) 55%, white 45%) 50%,
+          rgb(253 205 203 / 0.55) 70%,
           transparent 100%
         );
-        box-shadow: 0 0 10px rgb(255 110 203 / 0.6);
+        box-shadow: 0 0 10px rgb(255 132 130 / 0.6);
       }
     </style>
   </head>

@@ -1,10 +1,5 @@
 import { getSettings } from '../store'
 
-/**
- * SteamGridDB — the only source with art for Epic titles, non-Steam shortcuts
- * and local executables. Optional: it needs a free API key, so everything still
- * works without one, just with fewer covers.
- */
 const BASE = 'https://www.steamgriddb.com/api/v2'
 
 interface GridResponse {
@@ -12,7 +7,6 @@ interface GridResponse {
   data?: Array<{ url?: string; thumb?: string }> | { id?: number }
 }
 
-/** Cache lookups for the lifetime of the process; a scan can ask repeatedly. */
 const gameIdCache = new Map<string, number | null>()
 
 async function request(path: string, key: string): Promise<GridResponse | null> {
@@ -28,7 +22,6 @@ async function request(path: string, key: string): Promise<GridResponse | null> 
   }
 }
 
-/** Resolve a non-Steam title to a SteamGridDB game id by name. */
 async function findGameIdByName(name: string, key: string): Promise<number | null> {
   const cached = gameIdCache.get(name)
   if (cached !== undefined) return cached
@@ -50,17 +43,12 @@ const ENDPOINT: Record<GridKind, string> = {
   logo: 'logos'
 }
 
-/** Portrait capsules only for covers — a wide grid would crop badly on a card. */
 const QUERY: Record<GridKind, string> = {
   cover: '?dimensions=600x900&types=static&nsfw=false',
   hero: '?types=static&nsfw=false',
   logo: '?types=static&nsfw=false'
 }
 
-/**
- * Candidate image URLs, best first. Returns an empty list when no key is
- * configured, which is the normal case.
- */
 export async function steamGridDbCandidates(
   kind: GridKind,
   game: { steamAppId?: string; name: string }

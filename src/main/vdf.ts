@@ -1,9 +1,4 @@
-/**
- * Minimal parser for Valve KeyValues (.vdf / .acf) text files.
- * Handles nested blocks, quoted keys/values, // comments and escape sequences.
- * Good enough for libraryfolders.vdf and appmanifest_*.acf; it is not a full
- * implementation (no #include / conditionals).
- */
+// enough KeyValues for libraryfolders.vdf / appmanifest_*.acf. no #include or conditionals
 export type VdfNode = { [key: string]: string | VdfNode }
 
 export function parseVdf(input: string): VdfNode {
@@ -41,7 +36,7 @@ export function parseVdf(input: string): VdfNode {
           out += input[i++]
         }
       }
-      i++ // closing quote
+      i++
       return out
     }
 
@@ -83,7 +78,7 @@ export function parseVdf(input: string): VdfNode {
   return root
 }
 
-/** Case-insensitive child lookup — Valve is inconsistent about casing. */
+// Valve is inconsistent about casing
 export function pick(node: VdfNode | undefined, key: string): string | VdfNode | undefined {
   if (!node) return undefined
   if (key in node) return node[key]

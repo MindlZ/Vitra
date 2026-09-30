@@ -15,6 +15,11 @@ const api: LauncherApi = {
   getLibrary: () => ipcRenderer.invoke('library:get'),
   scan: () => ipcRenderer.invoke('library:scan'),
   getFriends: (force?: boolean) => ipcRenderer.invoke('friends:get', force),
+  joinFriend: (id: string) => ipcRenderer.invoke('friends:join', id),
+  getSessions: () => ipcRenderer.invoke('stats:sessions'),
+  getAchievements: (gameId: string) => ipcRenderer.invoke('achievements:get', gameId),
+  exportBackup: () => ipcRenderer.invoke('backup:export'),
+  importBackup: () => ipcRenderer.invoke('backup:import'),
 
   getMedia: () => ipcRenderer.invoke('media:get'),
   mediaCommand: (command: MediaCommand) => ipcRenderer.invoke('media:command', command),
@@ -28,6 +33,9 @@ const api: LauncherApi = {
   stopTracking: (id: string) => ipcRenderer.invoke('game:stop-tracking', id),
   patchGame: (id: string, patch: Partial<Game>) => ipcRenderer.invoke('game:patch', id, patch),
   removeGame: (id: string) => ipcRenderer.invoke('game:remove', id),
+  addCompanion: (id: string) => ipcRenderer.invoke('game:add-companion', id),
+  removeCompanion: (id: string, index: number) => ipcRenderer.invoke('game:remove-companion', id, index),
+  setAfterExit: (id: string, clear?: boolean) => ipcRenderer.invoke('game:set-after-exit', id, clear),
   addManualGame: () => ipcRenderer.invoke('game:add-manual'),
   openFolder: (id: string) => ipcRenderer.invoke('game:open-folder', id),
 

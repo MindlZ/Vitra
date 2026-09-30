@@ -1,15 +1,5 @@
-/**
- * Parser for Valve's *binary* KeyValues, used by shortcuts.vdf.
- *
- * Layout is a tag byte, a NUL-terminated key, then a value whose shape depends
- * on the tag:
- *   0x00  nested map, terminated by 0x08
- *   0x01  NUL-terminated string
- *   0x02  int32, little endian
- *   0x08  end of the current map
- * Types we don't need (float, pointer, wide string, int64) are skipped safely
- * rather than guessed at.
- */
+// binary KeyValues (shortcuts.vdf): [tag byte][key\0][value]
+// 00 map (ends at 08), 01 string\0, 02 int32 LE, 08 end of map
 export type BinaryVdfValue = string | number | BinaryVdfNode
 export interface BinaryVdfNode {
   [key: string]: BinaryVdfValue
@@ -70,11 +60,10 @@ export function parseBinaryVdf(buffer: Buffer): BinaryVdfNode {
           break
         case TYPE_UINT64:
         case TYPE_INT64:
-          // Playtime stamps we don't use; skip without losing alignment.
           offset += 8
           break
         default:
-          // Unknown tag — we can no longer trust the offsets, so stop here.
+          // unknown tag: offsets can't be trusted past here
           return node
       }
     }
@@ -85,7 +74,7 @@ export function parseBinaryVdf(buffer: Buffer): BinaryVdfNode {
   return readMap()
 }
 
-/** Case-insensitive lookup; Steam has changed the casing of these keys over time. */
+// Steam has changed these keys' casing over time
 export function pickBinary(node: BinaryVdfNode, key: string): BinaryVdfValue | undefined {
   if (key in node) return node[key]
   const lower = key.toLowerCase()

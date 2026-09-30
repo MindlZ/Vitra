@@ -13,8 +13,6 @@ function Control({
   disabled?: boolean
   children: ReactNode
 }) {
-  // Quiet glyphs, but real buttons with 40px targets, so a controller's focus
-  // can land on them later without any rework.
   return (
     <button
       onClick={onClick}
@@ -28,12 +26,6 @@ function Control({
   )
 }
 
-/**
- * What the PC is playing — Spotify, a browser tab, anything that reports to
- * Windows' media controls. Deliberately discreet: a small line of text with
- * faint controls that come up on hover or focus, and a hairline for progress.
- * Renders nothing when there's no session.
- */
 export default function NowPlaying() {
   const media = useMedia()
   const position = useMediaPosition(media)

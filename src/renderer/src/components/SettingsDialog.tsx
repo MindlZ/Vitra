@@ -14,16 +14,19 @@ import {
   RefreshCw,
   Scale,
   SlidersHorizontal,
+  Sparkles,
   Trash2,
   Tv,
+  Upload,
   X
 } from 'lucide-react'
 import CoffeeIcon from './CoffeeIcon'
 import type { ProgramsView, ScanResult, Settings } from '@shared/types'
 import developerAvatar from '../assets/mindlz.jpg'
-import { artUrl } from '../lib/art'
+import { artUrl, forgetMissingArt } from '../lib/art'
 import { activeWallpaper, PRESETS } from '../lib/wallpapers'
 import { describeUpdate, useUpdate } from '../lib/update'
+import { RELEASES } from '../lib/changelog'
 import { MIN_DIM } from './Backdrop'
 import Dropdown from './Dropdown'
 import { KOFI_URL } from './Sidebar'
@@ -48,10 +51,6 @@ const PROGRAMS_OPTIONS: Array<{ value: ProgramsView; label: string }> = [
 
 type SectionId = 'general' | 'library' | 'appearance' | 'connections' | 'about'
 
-/**
- * One section shows at a time, named in the header, so it's always clear
- * where you are. Each blurb says what the section is for in a line.
- */
 const SECTIONS: Array<{ id: SectionId; label: string; icon: typeof Info; blurb: string }> = [
   {
     id: 'general',
@@ -85,7 +84,7 @@ const SECTIONS: Array<{ id: SectionId; label: string; icon: typeof Info; blurb: 
   }
 ]
 
-/** Reopening Settings returns to the section you were last in (this session). */
+// module-level: reopening returns to the last section, per session
 let lastSection: SectionId = 'general'
 
 interface Props {
@@ -100,9 +99,9 @@ interface Props {
   onOpenBigPicture: () => void
   onPreviewScreenSaver: () => void
   onScan: () => void
+  onOpenWhatsNew: () => void
 }
 
-/** A titled group of related settings on one soft surface. */
 function Card({ title, children }: { title?: string; children: ReactNode }) {
   return (
     <section className="mb-6 last:mb-0">
@@ -112,7 +111,6 @@ function Card({ title, children }: { title?: string; children: ReactNode }) {
   )
 }
 
-/** Label and hint on the left, the control on the right. */
 function Row({ label, hint, children }: { label: string; hint?: ReactNode; children?: ReactNode }) {
   return (
     <div className="hairline-b flex items-center gap-5 py-3.5 last:border-0">
@@ -156,7 +154,6 @@ function Switch({
   )
 }
 
-/** One wallpaper choice: its picture, its name, a ring when it's the one showing. */
 function WallpaperTile({
   label,
   selected,
@@ -207,12 +204,49 @@ function ToggleRow({
 const quietButton =
   'glass-btn flex h-9 shrink-0 items-center gap-2 rounded-[10px] px-3 text-[12px] text-dim transition-colors hover:text-ink'
 
-/**
- * Write-only key field. The main process never sends a saved key back, only
- * whether one is set, so the field starts empty and says "Saved". Typing
- * replaces the key on blur (never per keystroke, so a half-typed key isn't
- * saved and used); Remove clears it. The eye only reveals what you're typing.
- */
+function BackupRow({
+  label,
+  action,
+  icon,
+  done,
+  run
+}: {
+  label: string
+  action: string
+  icon: ReactNode
+  done: string
+  run: () => Promise<{ ok: boolean; error?: string }> | undefined
+}) {
+  const [busy, setBusy] = useState(false)
+  const [status, setStatus] = useState<string>()
+
+  return (
+    <Row label={label} hint={status}>
+      <button
+        disabled={busy}
+        onClick={() => {
+          setBusy(true)
+          setStatus(undefined)
+          void Promise.resolve(run())
+            .then((result) => {
+              // no error = cancelled
+              if (result?.ok) setStatus(done)
+              else if (result?.error) setStatus(result.error)
+            })
+            .catch((err: Error) => setStatus(err.message))
+            .finally(() => setBusy(false))
+        }}
+        className={quietButton}
+      >
+        {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : icon}
+        {action}
+      </button>
+    </Row>
+  )
+}
+
+// write-only: main never sends a key back. commits on blur so a half-typed key
+// is never saved and used
 function KeyField({
   label,
   hint,
@@ -229,7 +263,7 @@ function KeyField({
 
   const commit = (): void => {
     const next = draft.trim()
-    // An empty field means "leave it", not "delete it"; that's Remove's job.
+    // empty = leave it; Remove deletes
     if (!next) return
     onCommit(next)
     setDraft('')
@@ -303,12 +337,11 @@ export default function SettingsDialog({
   onClearBackground,
   onOpenBigPicture,
   onPreviewScreenSaver,
-  onScan
+  onScan,
+  onOpenWhatsNew
 }: Props) {
   const [section, setSection] = useState<SectionId>(lastSection)
-  // Start with Windows only registers in the installed app; say so otherwise.
   const [packaged, setPackaged] = useState(true)
-  // Rich Presence needs Vitra's Discord application id built in.
   const [discordReady, setDiscordReady] = useState(true)
   const [version, setVersion] = useState<string | null>(null)
   const update = useUpdate()
@@ -354,6 +387,13 @@ export default function SettingsDialog({
           checked={settings.openAtLogin}
           onChange={(openAtLogin) => onChange({ openAtLogin })}
         />
+        {settings.openAtLogin && (
+          <ToggleRow
+            label="Start in tray"
+            checked={settings.startInTray}
+            onChange={(startInTray) => onChange({ startInTray })}
+          />
+        )}
       </Card>
       <Card title="Closing the window">
         <ToggleRow
@@ -379,7 +419,7 @@ export default function SettingsDialog({
           onChange={(trackPlaytime) => onChange({ trackPlaytime })}
         />
         <ToggleRow
-          label="Minimise on launch"
+          label="Minimise when a game starts"
           checked={settings.minimiseOnLaunch}
           onChange={(minimiseOnLaunch) => onChange({ minimiseOnLaunch })}
         />
@@ -460,6 +500,28 @@ export default function SettingsDialog({
             })}
           </div>
         </div>
+      </Card>
+
+      <Card title="Backup">
+        <BackupRow
+          label="Back up"
+          action="Save"
+          icon={<Download className="h-3.5 w-3.5" />}
+          done="Saved"
+          run={() => window.launcher.exportBackup?.()}
+        />
+        <BackupRow
+          label="Restore"
+          action="Open"
+          icon={<Upload className="h-3.5 w-3.5" />}
+          done="Restored"
+          run={() =>
+            window.launcher.importBackup?.().then((result) => {
+              if (result.ok) forgetMissingArt()
+              return result
+            })
+          }
+        />
       </Card>
     </>
   )
@@ -566,6 +628,12 @@ export default function SettingsDialog({
             className="vitra-range w-full"
           />
         </div>
+
+        <ToggleRow
+          label="Particles"
+          checked={settings.backgroundParticles}
+          onChange={(backgroundParticles) => onChange({ backgroundParticles })}
+        />
       </Card>
 
       <Card title="Screen saver">
@@ -605,6 +673,12 @@ export default function SettingsDialog({
           hint="steamcommunity.com/dev/apikey"
           saved={Boolean(settings.keysSet?.steamWebApiKey)}
           onCommit={(steamWebApiKey) => onChange({ steamWebApiKey })}
+        />
+        <KeyField
+          label="Xbox key (OpenXBL)"
+          hint="xbl.io"
+          saved={Boolean(settings.keysSet?.xboxApiKey)}
+          onCommit={(xboxApiKey) => onChange({ xboxApiKey })}
         />
         <KeyField
           label="SteamGridDB key"
@@ -686,6 +760,12 @@ export default function SettingsDialog({
           checked={settings.checkForUpdates}
           onChange={(checkForUpdates) => onChange({ checkForUpdates })}
         />
+        <Row label={`What's new in ${RELEASES[0].version}`}>
+          <button onClick={onOpenWhatsNew} className={quietButton}>
+            <Sparkles className="h-3.5 w-3.5" />
+            Show
+          </button>
+        </Row>
       </Card>
 
       <Card title="What it is">
@@ -723,8 +803,6 @@ export default function SettingsDialog({
       className="fixed inset-0 z-50 flex items-start justify-center bg-black/45 pt-[84px] backdrop-blur-[3px]"
       onClick={onClose}
     >
-      {/* aria-modal also scopes controller navigation to the dialog, and LB/RB
-          step through its sections (data-nav-view). */}
       <div
         role="dialog"
         aria-modal="true"
@@ -784,7 +862,7 @@ export default function SettingsDialog({
             </button>
           </header>
 
-          {/* Keyed so each section starts at the top with a small settle. */}
+          {/* keyed: each section starts scrolled to the top */}
           <div key={section} className="animate-fade-up min-h-0 flex-1 overflow-y-auto px-7 pb-7">
             {content[section]}
           </div>

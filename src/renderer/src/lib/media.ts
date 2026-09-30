@@ -1,11 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { MediaCommand, MediaState } from '@shared/types'
 
-/**
- * What Windows says is playing, kept live. Null until the first answer, or for
- * good if the preload predates the media bridge (preload and main only load
- * when Electron starts, so a renderer hot-reload can be ahead of them).
- */
 export function useMedia(): MediaState | null {
   const [state, setState] = useState<MediaState | null>(null)
 
@@ -30,10 +25,7 @@ export function sendMedia(command: MediaCommand): void {
   if (typeof window.launcher.mediaCommand === 'function') void window.launcher.mediaCommand(command)
 }
 
-/**
- * Players only report position when it changes course (play, pause, seek), so
- * extrapolate from the last report while playing. Ticks once a second.
- */
+// players only report position on play/pause/seek; extrapolate between
 export function useMediaPosition(state: MediaState | null): number {
   const playing = state?.status === 'Playing'
   const [now, setNow] = useState(() => Date.now())
@@ -50,7 +42,7 @@ export function useMediaPosition(state: MediaState | null): number {
   return Math.min(state.durationMs || Infinity, state.positionMs + elapsed)
 }
 
-/** "SpotifyAB.SpotifyMusic_…!Spotify" or "chrome.exe" → a name people know. */
+// "SpotifyAB.SpotifyMusic_…!Spotify", "chrome.exe"
 export function playerName(app?: string): string | undefined {
   if (!app) return undefined
   const lower = app.toLowerCase()

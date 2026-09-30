@@ -10,24 +10,14 @@ interface Props<T extends string> {
   value: T
   options: Array<Option<T>>
   onChange: (value: T) => void
-  /** Accessible name, e.g. "Sort by". */
   label: string
 }
 
-/**
- * A select that looks like the launcher. The native <select>'s popup is drawn
- * by Windows and can't be styled, so this is a button and a listbox of real
- * buttons (so the controller's spatial navigation and A work unchanged).
- *
- * Keyboard: Enter/Space/arrows open it on the current choice; arrows, Home and
- * End move; Enter picks; Escape or Tab closes. A click outside, or focus
- * leaving, closes it too. data-nav-dismiss lets the controller's B close it
- * instead of stepping back out of the view (lib/gamepad.ts).
- */
+// native <select>'s popup is drawn by Windows and can't be styled. real buttons
+// so the controller's spatial nav just works
 export default function Dropdown<T extends string>({ value, options, onChange, label }: Props<T>) {
   const [open, setOpen] = useState(false)
-  // Opens upward when the space below (inside whatever scrolls around it, e.g.
-  // a Settings pane) can't fit the list.
+  // flips up when the scroll container below can't fit it
   const [upward, setUpward] = useState(false)
   const root = useRef<HTMLDivElement>(null)
   const trigger = useRef<HTMLButtonElement>(null)
@@ -52,20 +42,17 @@ export default function Dropdown<T extends string>({ value, options, onChange, l
           break
         }
       }
-      // 34px per option plus the menu's padding and gap.
       const needed = options.length * 34 + 16
       setUpward(bottom - rect.bottom < needed && rect.top > needed)
     }
     setOpen(true)
   }
 
-  // Land on the current choice when the menu opens.
   useEffect(() => {
     if (!open) return
     const buttons = optionButtons()
     const index = Math.max(0, options.findIndex((option) => option.value === value))
     buttons[index]?.focus()
-    // Only on opening; moving focus afterwards is the arrow keys' job.
   }, [open])
 
   useEffect(() => {
@@ -100,7 +87,7 @@ export default function Dropdown<T extends string>({ value, options, onChange, l
     } else return
 
     event.preventDefault()
-    // Escape here means "close the menu", not "close the page behind it".
+    // don't let Escape also close the page behind
     event.stopPropagation()
   }
 

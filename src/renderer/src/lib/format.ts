@@ -1,15 +1,10 @@
 import type { Game, ProgramsView } from '@shared/types'
 
-/** Software rather than a game: the user's call if they've made one, else Steam's genres. */
 export function isSoftware(game: Game): boolean {
   return game.softwareOverride ?? game.software ?? false
 }
 
-/**
- * Whether a game belongs in the library's views (All games, stores, tags,
- * counts). Programs don't when they have their own tab or are hidden. Shared
- * by App's filter and Sidebar's counts so the two never disagree.
- */
+// App's filter and Sidebar's counts must both use this or they disagree
 export function inLibrary(game: Game, programsView: ProgramsView): boolean {
   if (game.hidden) return false
   return programsView === 'library' || !isSoftware(game)
@@ -60,22 +55,33 @@ export function initials(name: string): string {
   return (words[0][0] + words[words.length - 1][0]).toUpperCase()
 }
 
-/** Stable hue per title, so a game without art always looks the same. */
 export function hueFor(name: string): number {
   let hash = 0
   for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) % 360
   return hash
 }
 
-export function sourceLabel(source: string): string {
-  if (source === 'steam') return 'Steam'
-  if (source === 'epic') return 'Epic Games'
-  if (source === 'gog') return 'GOG'
-  if (source === 'xbox') return 'Xbox'
-  return 'Local'
+const SOURCE_LABELS: Record<string, string> = {
+  steam: 'Steam',
+  epic: 'Epic Games',
+  gog: 'GOG',
+  xbox: 'Xbox',
+  battlenet: 'Battle.net',
+  ea: 'EA app',
+  ubisoft: 'Ubisoft Connect',
+  riot: 'Riot'
 }
 
-/** Subsequence match, so "hlfl" finds "Half-Life". */
+export function sourceLabel(source: string): string {
+  return SOURCE_LABELS[source] ?? 'Local'
+}
+
+// counts siblings too, so a merged game shows under every store it's on
+export function hasSource(game: Game, source: string): boolean {
+  return game.source === source || Boolean(game.siblings?.some((sibling) => sibling.source === source))
+}
+
+// subsequence: "hlfl" finds Half-Life
 export function matchesQuery(haystack: string, query: string): boolean {
   const target = haystack.toLowerCase()
   const needle = query.toLowerCase().trim()

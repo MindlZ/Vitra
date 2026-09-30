@@ -14,11 +14,7 @@ interface Props {
   onToggleFavorite: () => void
 }
 
-/**
- * "Active" is hover or keyboard/controller focus; either one lifts the card.
- * Tracked in JS rather than :hover so the wobble can play on the way *out*
- * as well, and not on first render.
- */
+// JS, not :hover, so the wobble also plays on the way out, and never on mount
 function useActive() {
   const hovered = useRef(false)
   const focused = useRef(false)
@@ -44,8 +40,7 @@ function useActive() {
         hovered.current = false
         sync()
       },
-      // Only visible focus counts: a mouse click also focuses the button, and
-      // that shouldn't keep the card lifted after the pointer leaves.
+      // visible focus only, or a click keeps the card lifted after the mouse leaves
       onFocus: (event: FocusEvent<HTMLElement>) => {
         if ((event.target as HTMLElement).matches(':focus-visible')) focused.current = true
         sync()
@@ -62,10 +57,7 @@ export default function GameCard({ game, running, onOpen, onPlay, onToggleFavori
   const { phase, handlers } = useActive()
 
   return (
-    // content-visibility clips paint to this box, so the padding (cancelled by
-    // the negative margin) is room for the glow; while active the clip is
-    // lifted entirely (.vitra-card[data-active]). The data-nav-* attributes are
-    // for controller navigation (lib/gamepad.ts).
+    // content-visibility clips paint to this box: the -m/p pair is room for the glow
     <div
       className="vitra-card group -m-4 p-4"
       data-active={phase === 'in' || undefined}
@@ -73,8 +65,6 @@ export default function GameCard({ game, running, onOpen, onPlay, onToggleFavori
       data-nav-group
       data-game-id={game.id}
     >
-      {/* Grows from its bottom edge, so the card rises off the waterline
-          rather than swelling in place. */}
       <div className="vitra-card__lift relative" {...handlers}>
         <button
           onClick={onOpen}
@@ -92,7 +82,6 @@ export default function GameCard({ game, running, onOpen, onPlay, onToggleFavori
             <CoverImage game={game} />
           </div>
 
-          {/* Name plate, revealed when active so the art stays clean at rest. */}
           <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/92 via-black/55 to-transparent px-3 pt-10 pb-2.5 opacity-0 transition-opacity duration-200 group-data-[active]:opacity-100">
             <div className="truncate font-display text-[14px] leading-tight font-semibold text-snow [font-stretch:88%]">
               {game.name}
@@ -119,7 +108,7 @@ export default function GameCard({ game, running, onOpen, onPlay, onToggleFavori
           )}
         </button>
 
-        {/* Hover-only for the mouse; a controller reaches these with X and Y. */}
+        {/* hover-only; a controller uses X / Y */}
         {game.installed && (
           <button
             onClick={onPlay}

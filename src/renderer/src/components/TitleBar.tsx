@@ -15,11 +15,6 @@ interface Props {
   scanning: boolean
 }
 
-/**
- * Only there when a newer version is out: one click updates (download,
- * install, reopen). While it works, it shows how far along it is. Settings
- * → About has the same, with "What's new".
- */
 function UpdatePill() {
   const update = useUpdate()
   if (!update || !['available', 'downloading', 'installing'].includes(update.status)) return null
@@ -38,7 +33,6 @@ function UpdatePill() {
       disabled={busy}
       className="animate-fade-up relative mr-1.5 flex h-8 items-center gap-2 overflow-hidden rounded-full bg-[rgb(var(--accent-rgb)/0.14)] pr-3.5 pl-3 text-[12px] font-medium text-accent tabular-nums ring-1 ring-[rgb(var(--accent-rgb)/0.35)] transition-colors hover:bg-[rgb(var(--accent-rgb)/0.22)] disabled:cursor-default"
     >
-      {/* Fills behind the label as it downloads. */}
       {update.status === 'downloading' && (
         <span
           aria-hidden
@@ -153,7 +147,6 @@ export default function TitleBar({
         </button>
       </div>
 
-      {/* The app's tools, then the window's. */}
       <div aria-hidden className="-mx-1 h-5 w-px shrink-0 bg-white/10" />
       <WindowControls />
     </header>

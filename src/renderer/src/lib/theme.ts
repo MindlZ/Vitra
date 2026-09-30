@@ -1,15 +1,6 @@
 import type { Appearance, Palette } from '@shared/types'
 
-/*
- * Applies a wallpaper's palette (sampled in main/background.ts) over the
- * stylesheet's own colours. Every accent in the UI goes through these
- * variables: the Tailwind theme colours for utilities, and the *-rgb triples
- * for the glows and gradients that need an alpha (`rgb(var(--accent-rgb) / .6)`).
- * With no palette the properties are removed and index.css's magenta returns.
- *
- * The last palette is kept in localStorage so the splash and first paint are
- * already the right colour, rather than flicking once settings arrive.
- */
+// cached in localStorage so first paint is already the right colour
 
 const STORAGE_KEY = 'vitra.palette'
 function triple(hex: string): string {
@@ -34,29 +25,23 @@ export function applyPalette(palette: Palette | undefined): void {
     if (palette) localStorage.setItem(STORAGE_KEY, JSON.stringify(palette))
     else localStorage.removeItem(STORAGE_KEY)
   } catch {
-    // Storage off: the colours still apply, just not before settings load.
+    // storage off
   }
   window.dispatchEvent(new Event('vitra:palette'))
 }
 
 const APPEARANCE_KEY = 'vitra.appearance'
 
-/**
- * Light or dark UI, as data-appearance on <html>; index.css swaps every
- * colour token on it. Cached like the palette, so a light app doesn't open
- * dark and then flip once settings arrive.
- */
 export function applyAppearance(appearance: Appearance): void {
   document.documentElement.dataset.appearance = appearance
   try {
     localStorage.setItem(APPEARANCE_KEY, appearance)
   } catch {
-    // Storage off: still applied, just not before settings load.
+    // storage off
   }
   window.dispatchEvent(new Event('vitra:palette'))
 }
 
-/** Called once before the first render. */
 export function restorePalette(): void {
   try {
     const saved = localStorage.getItem(STORAGE_KEY)
@@ -66,15 +51,11 @@ export function restorePalette(): void {
       document.documentElement.dataset.appearance = appearance
     }
   } catch {
-    // Missing or corrupt: the stylesheet's colours stand.
+    // corrupt, stylesheet colours stand
   }
 }
 
-/**
- * The current colours as the CSS resolves them, for canvas drawing. Read
- * from the canvas's own element, so a dark subtree (the screen saver) gets
- * dark colours in a light app.
- */
+// pass the canvas's own element: a dark subtree in a light app resolves differently
 export function readPalette(el: Element = document.documentElement): {
   accent: string
   tint: string

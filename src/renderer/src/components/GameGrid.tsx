@@ -13,7 +13,7 @@ export default function GameGrid({ games, running, onOpen, onPlay, onToggleFavor
   const runningIds = new Set(running.map((r) => r.gameId))
 
   return (
-    // Each card carries its own reflection in layout, so the row gap is small.
+    // small row gap: each card's reflection takes layout space
     <div className="vitra-grid grid grid-cols-[repeat(auto-fill,minmax(168px,1fr))] gap-x-5 gap-y-4 px-8 pt-10 pb-12">
       {games.map((game) => (
         <GameCard

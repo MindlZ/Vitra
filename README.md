@@ -63,8 +63,10 @@ are untouched.
 
 ### One library
 
-Steam, non-Steam shortcuts, Epic, GOG, Xbox / Game Pass and any `.exe`, in one
-grid. Owned games that aren't installed appear alongside, ready to install.
+Steam, non-Steam shortcuts, Epic, GOG, Xbox / Game Pass, Battle.net, EA app,
+Ubisoft Connect, Riot and any `.exe`, in one grid. Owned games that aren't
+installed appear alongside, ready to install. A game you own on two stores is
+one card, with its playtime combined and a choice of which store launches it.
 Cover art is fetched automatically. Sort, search, favourite and tag anything.
 
 <p align="center">
@@ -73,9 +75,11 @@ Cover art is fetched automatically. Sort, search, favourite and tag anything.
 
 ### Game pages
 
-Artwork, time played, last played, and your Steam and Xbox Game Bar captures
-for every game. Playtime is tracked for all of them, including games Steam
-never counted. Existing Steam hours are imported on first run.
+Artwork, time played, last played, Steam achievements, and your Steam and Xbox
+Game Bar captures for every game. Playtime is tracked for all of them,
+including games Steam never counted. Existing Steam hours are imported on
+first run. A game can bring programs along: start Lossless Scaling or a mod
+manager with it, close them when it ends, or run a script afterwards.
 
 <p align="center">
   <img src="docs/images/game.jpg" alt="A game's page" width="900" />
@@ -108,8 +112,14 @@ colours from the wallpaper and switches between light and dark to match.
   <img src="docs/images/home-smoke.jpg" alt="The light theme" width="900" />
 </p>
 
+### Stats
+
+Hours per week, a play calendar, and what you've played most in the last 30
+days, built from every session Vitra tracks.
+
 ### Also
 
+- Back up and restore your library, playtime and custom art in one file
 - Controller support throughout
 - Discord Rich Presence
 - A separate Programs tab for apps like Wallpaper Engine
@@ -130,13 +140,14 @@ Vitra scans your stores on first launch. Everything below is optional.
 
 ### API keys (optional)
 
-Two free keys enable extra features. Both are entered in **Settings →
+Three free keys enable extra features. All are entered in **Settings →
 Connections**, encrypted with your Windows account, and only ever sent to
 their own service.
 
 | Key | Enables | Get it from |
 | --- | --- | --- |
-| Steam Web API key | Online friends and what they're playing | [steamcommunity.com/dev/apikey](https://steamcommunity.com/dev/apikey) |
+| Steam Web API key | Online friends and what they're playing; achievements | [steamcommunity.com/dev/apikey](https://steamcommunity.com/dev/apikey) |
+| OpenXBL key | Xbox friends, alongside Steam's | [xbl.io](https://xbl.io) |
 | SteamGridDB API key | Cover art for non-Steam games | [steamgriddb.com](https://www.steamgriddb.com/profile/preferences/api) |
 
 #### Steam Web API key
@@ -146,7 +157,18 @@ their own service.
 2. Enter any domain (`localhost` works), accept the terms and click **Register**.
 3. Paste the key into **Settings → Connections → Steam Web API key**.
 4. Set your friends list to public: **Steam profile → Edit Profile → Privacy
-   Settings → Friends List: Public**.
+   Settings → Friends List: Public**. For achievements, also set **Game
+   details: Public**.
+
+#### OpenXBL key (Xbox friends)
+
+[OpenXBL](https://xbl.io) is a third-party service for the Xbox Live API.
+
+1. Sign in at [xbl.io](https://xbl.io) with your Microsoft account.
+2. Create an API key on your profile page.
+3. Paste it into **Settings → Connections → Xbox key (OpenXBL)**.
+
+The free tier allows 150 requests an hour; Vitra uses about 30 at most.
 
 #### SteamGridDB API key
 
