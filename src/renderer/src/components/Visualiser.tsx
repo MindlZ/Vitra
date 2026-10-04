@@ -1,4 +1,5 @@
 import { useEffect, useRef, type RefObject } from 'react'
+import { pace } from '../lib/pace'
 import { readPalette } from '../lib/theme'
 
 interface Props {
@@ -8,8 +9,25 @@ interface Props {
 const HORIZON = 0.68
 const BAR = 4
 const GAP = 4
-// per-frame fall-off; rises are instant so beats land
+// per 60fps frame; rises are instant so beats land
 const DECAY = 0.88
+// capped: rAF runs at the monitor's rate (144Hz+) otherwise. idle swell needs less
+const FRAME_MS = 1000 / 60
+const IDLE_FRAME_MS = 1000 / 30
+const SLOW_FRAME_MS = 1000 / 20
+// peaks, in bar heights /s and /s². the bar throws its dot at a share of its own speed
+const GRAVITY = 5
+const KICK = 0.12
+const MAX_KICK = 1.4
+const DOT_GAP = 3
+const GLOW_BLUR = 12
+
+// set by App; read every frame so a toggle lands without a remount
+const look = { peaks: true, glow: true }
+export function setVisualiserLook(next: { peaks: boolean; glow: boolean }): void {
+  look.peaks = next.peaks
+  look.glow = next.glow
+}
 
 const RETRY_MS = [1000, 2000, 4000, 8000, 15000]
 const DEVICE_SETTLE_MS = 800
@@ -127,19 +145,29 @@ function startCapture(): () => void {
   }
 }
 
+// hidden = minimised, in the tray or covered by a game: no capture until it's back
+function syncCapture(): void {
+  if (users > 0 && document.visibilityState === 'visible') {
+    clearTimeout(releaseTimer)
+    releaseTimer = undefined
+    stopCapture ??= startCapture()
+  } else if (stopCapture && releaseTimer === undefined) {
+    releaseTimer = setTimeout(() => {
+      releaseTimer = undefined
+      stopCapture?.()
+      stopCapture = null
+    }, RELEASE_MS)
+  }
+}
+document.addEventListener('visibilitychange', syncCapture)
+
 function useSystemAudio(): RefObject<AnalyserNode | null> {
   useEffect(() => {
     users++
-    clearTimeout(releaseTimer)
-    stopCapture ??= startCapture()
+    syncCapture()
     return () => {
       users--
-      if (users > 0) return
-      releaseTimer = setTimeout(() => {
-        if (users > 0) return
-        stopCapture?.()
-        stopCapture = null
-      }, RELEASE_MS)
+      syncCapture()
     }
   }, [])
 
@@ -159,9 +187,13 @@ export default function Visualiser({ className = '' }: Props) {
     let width = 0
     let height = 0
     let levels = new Float32Array(0)
+    // what was drawn last frame, so a peak knows how fast its bar rose
+    let shown = new Float32Array(0)
+    let peaks = new Float32Array(0)
+    let speeds = new Float32Array(0)
     let bins = new Uint8Array(0)
     let frame = 0
-    let tick = 0
+    let last = 0
 
     const resize = (): void => {
       const dpr = window.devicePixelRatio || 1
@@ -170,23 +202,61 @@ export default function Visualiser({ className = '' }: Props) {
       canvas.width = Math.round(width * dpr)
       canvas.height = Math.round(height * dpr)
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-      levels = new Float32Array(Math.ceil(width / (BAR + GAP) / 2))
+      const half = Math.ceil(width / (BAR + GAP) / 2)
+      levels = new Float32Array(half)
+      shown = new Float32Array(half)
+      peaks = new Float32Array(half)
+      speeds = new Float32Array(half)
+      paintsFor = -1
     }
+
+    let colours = readPalette(canvas)
+    // built once per size/palette, not per frame
+    let sky: CanvasGradient | undefined
+    let fade: CanvasGradient | undefined
+    let line: CanvasGradient | undefined
+    let glowColour = ''
+    let paintsFor = -1
+    const buildPaints = (horizon: number, maxBar: number): void => {
+      sky = ctx.createLinearGradient(0, horizon - maxBar, 0, horizon)
+      sky.addColorStop(0, colours.peak)
+      sky.addColorStop(0.55, colours.mid)
+      sky.addColorStop(1, `rgb(${colours.accent})`)
+      // the edge fade, as one destination-in pass instead of an alpha per bar
+      fade = ctx.createLinearGradient(0, 0, width, 0)
+      fade.addColorStop(0, 'rgba(0, 0, 0, 0.3)')
+      fade.addColorStop(0.5, 'rgba(0, 0, 0, 1)')
+      fade.addColorStop(1, 'rgba(0, 0, 0, 0.3)')
+      line = ctx.createLinearGradient(0, 0, width, 0)
+      line.addColorStop(0, `rgb(${colours.tint} / 0)`)
+      line.addColorStop(0.5, colours.line)
+      line.addColorStop(1, `rgb(${colours.tint} / 0)`)
+      glowColour = `rgb(${colours.accent} / 0.6)`
+      paintsFor = maxBar
+    }
+
     const observer = new ResizeObserver(resize)
     observer.observe(canvas)
     resize()
 
-    let colours = readPalette(canvas)
     const onPalette = (): void => {
       colours = readPalette(canvas)
+      paintsFor = -1
     }
     window.addEventListener('vitra:palette', onPalette)
 
     const draw = (time: number): void => {
       frame = requestAnimationFrame(draw)
       const node = analyser.current
-      // idle swell: half frame rate is plenty
-      if (!node && tick++ % 2) return
+      const speed = pace()
+      if (speed === 'paused') return
+      const frameMs = speed === 'slow' ? SLOW_FRAME_MS : node ? FRAME_MS : IDLE_FRAME_MS
+      // a little slack: rAF timestamps jitter, and a strict cap halves the rate
+      if (time - last < frameMs - 2) return
+      // capped: rAF pauses while hidden, don't jump on return
+      const dt = Math.min(0.1, (time - last) / 1000)
+      last = time
+      const decay = Math.pow(DECAY, dt * 60)
 
       const half = levels.length
       if (node) {
@@ -209,41 +279,88 @@ export default function Visualiser({ className = '' }: Props) {
           target = Math.pow(sum / (b - a) / 255, 1.5) * (1 + (i / half) * 0.6)
           loud = Math.max(loud, target)
         }
-        levels[i] = Math.max(target, levels[i] * DECAY)
+        levels[i] = Math.max(target, levels[i] * decay)
       }
 
       const swell = loud < 0.02 && !reduceMotion
+      for (let i = 0; i < half; i++) {
+        let v = Math.min(1, levels[i])
+        if (swell) v = Math.max(v, 0.035 + 0.03 * Math.sin(time / 700 + i * 0.32))
+        if (v >= peaks[i]) {
+          speeds[i] = Math.max(speeds[i], Math.min(MAX_KICK, ((v - shown[i]) / dt) * KICK))
+        }
+        shown[i] = v
+        speeds[i] -= GRAVITY * dt
+        peaks[i] += speeds[i] * dt
+        if (peaks[i] <= v) {
+          peaks[i] = v
+          if (speeds[i] < 0) speeds[i] = 0
+        } else if (peaks[i] >= 1) {
+          peaks[i] = 1
+          if (speeds[i] > 0) speeds[i] = 0
+        }
+      }
+
+      const { peaks: withPeaks, glow } = look
+      const dot = BAR / 2
       const horizon = Math.round(height * HORIZON)
-      const maxBar = horizon - 6
+      // headroom for a dot on a full bar
+      const maxBar = horizon - (withPeaks ? 6 + DOT_GAP + BAR : 6)
+      if (maxBar !== paintsFor) buildPaints(horizon, maxBar)
       const cx = width / 2
 
       ctx.clearRect(0, 0, width, height)
 
-      const sky = ctx.createLinearGradient(0, horizon - maxBar, 0, horizon)
-      sky.addColorStop(0, colours.peak)
-      sky.addColorStop(0.55, colours.mid)
-      sky.addColorStop(1, `rgb(${colours.accent})`)
+      // one path, one fill: the glow is a single blur, not one per bar
+      ctx.beginPath()
+      for (let i = 0; i < half; i++) {
+        const h = Math.max(2, shown[i] * maxBar)
+        const offset = i * (BAR + GAP) + GAP / 2
+        ctx.roundRect(cx + offset, horizon - h, BAR, h, [2, 2, 0, 0])
+        ctx.roundRect(cx - offset - BAR, horizon - h, BAR, h, [2, 2, 0, 0])
+      }
+      ctx.fillStyle = sky!
+      if (glow) {
+        ctx.shadowColor = glowColour
+        ctx.shadowBlur = GLOW_BLUR
+      }
+      ctx.fill()
 
-      for (let pass = 0; pass < 2; pass++) {
-        const reflect = pass === 1
-        ctx.fillStyle = reflect ? `rgb(${colours.accent})` : sky
+      if (withPeaks) {
+        ctx.beginPath()
         for (let i = 0; i < half; i++) {
-          let v = Math.min(1, levels[i])
-          if (swell) v = Math.max(v, 0.035 + 0.03 * Math.sin(time / 700 + i * 0.32))
-          const h = Math.max(2, v * maxBar)
-          ctx.globalAlpha = (1 - (i / half) * 0.7) * (reflect ? 0.3 : 1)
+          const y = horizon - Math.max(2, peaks[i] * maxBar) - DOT_GAP - dot
           const offset = i * (BAR + GAP) + GAP / 2
-          for (const x of [cx + offset, cx - offset - BAR]) {
-            if (reflect) ctx.fillRect(x, horizon + 2, BAR, h * 0.55)
-            else {
-              ctx.beginPath()
-              ctx.roundRect(x, horizon - h, BAR, h, [2, 2, 0, 0])
-              ctx.fill()
-            }
-          }
+          ctx.moveTo(cx + offset + BAR, y)
+          ctx.arc(cx + offset + dot, y, dot, 0, Math.PI * 2)
+          ctx.moveTo(cx - offset, y)
+          ctx.arc(cx - offset - dot, y, dot, 0, Math.PI * 2)
+        }
+        ctx.fillStyle = colours.peak
+        ctx.fill()
+      }
+      ctx.shadowBlur = 0
+
+      ctx.globalAlpha = 0.3
+      ctx.beginPath()
+      for (let i = 0; i < half; i++) {
+        const h = Math.max(2, shown[i] * maxBar)
+        const offset = i * (BAR + GAP) + GAP / 2
+        ctx.rect(cx + offset, horizon + 2, BAR, h * 0.55)
+        ctx.rect(cx - offset - BAR, horizon + 2, BAR, h * 0.55)
+        if (withPeaks) {
+          const y = horizon + 2 + (Math.max(2, peaks[i] * maxBar) + DOT_GAP + dot) * 0.55
+          ctx.rect(cx + offset, y - 1, BAR, 2)
+          ctx.rect(cx - offset - BAR, y - 1, BAR, 2)
         }
       }
+      ctx.fillStyle = `rgb(${colours.accent})`
+      ctx.fill()
       ctx.globalAlpha = 1
+
+      ctx.globalCompositeOperation = 'destination-in'
+      ctx.fillStyle = fade!
+      ctx.fillRect(0, 0, width, height)
 
       // ripples cut out of the reflection
       ctx.globalCompositeOperation = 'destination-out'
@@ -252,11 +369,7 @@ export default function Visualiser({ className = '' }: Props) {
       }
       ctx.globalCompositeOperation = 'source-over'
 
-      const line = ctx.createLinearGradient(0, 0, width, 0)
-      line.addColorStop(0, `rgb(${colours.tint} / 0)`)
-      line.addColorStop(0.5, colours.line)
-      line.addColorStop(1, `rgb(${colours.tint} / 0)`)
-      ctx.fillStyle = line
+      ctx.fillStyle = line!
       ctx.fillRect(0, horizon, width, 1)
     }
     frame = requestAnimationFrame(draw)

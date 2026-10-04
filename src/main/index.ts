@@ -23,6 +23,7 @@ import { getMedia, onMediaChange, sendMediaCommand, stopMedia } from './media'
 import { backfillLightness, clearBackground, setBackground } from './background'
 import { capturePath, listCaptures, serveCapture } from './captures'
 import { runPower } from './power'
+import { exportPerfReport } from './perf'
 import { checkForUpdates, getUpdateState, installUpdate, scheduleUpdateChecks } from './updater'
 import { applyLoginItem, createTray, destroyTray, showWindow, startedInBackground } from './tray'
 import { clearSteamPathCache } from './paths'
@@ -33,6 +34,7 @@ import {
   type GameSource,
   type MediaCommand,
   type PowerAction,
+  type ProcessMetric,
   type Settings,
   type WindowAction
 } from '../shared/types'
@@ -381,6 +383,16 @@ function registerIpc(): void {
     version: app.getVersion(),
     discordConfigured: discordConfigured()
   }))
+
+  ipcMain.handle('app:metrics', (): ProcessMetric[] =>
+    app.getAppMetrics().map((metric) => ({
+      type: metric.type,
+      cpu: Math.round(metric.cpu.percentCPUUsage * 10) / 10,
+      // privateBytes is windows-only, hence the fallback
+      memoryMb: Math.round((metric.memory.privateBytes ?? metric.memory.workingSetSize) / 102.4) / 10
+    }))
+  )
+  ipcMain.handle('perf:export', (_event, recording: unknown) => exportPerfReport(mainWindow, recording))
 
   ipcMain.handle('settings:pick-steam-path', async () => {
     const result = await dialog.showOpenDialog({

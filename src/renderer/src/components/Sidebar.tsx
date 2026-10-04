@@ -255,7 +255,7 @@ function StoreCarousel({
             aria-hidden={hidden || undefined}
             title={collapsed || !isFront ? `${row.label}${row.count != null ? ` (${row.count})` : ''}` : undefined}
             aria-label={collapsed ? row.label : undefined}
-            className={`group absolute inset-x-2 flex items-center gap-2.5 rounded-[9px] text-left text-[13px] transition-[transform,opacity,background-color,box-shadow] duration-300 ease-out motion-reduce:transition-none ${
+            className={`vitra-store-row group absolute inset-x-2 flex items-center gap-2.5 rounded-[9px] text-left text-[13px] transition-[transform,opacity,background-color,box-shadow] duration-300 ease-out motion-reduce:transition-none ${
               collapsed ? 'justify-center px-0' : 'px-2.5'
             } ${
               isFront

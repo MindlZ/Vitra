@@ -91,6 +91,11 @@ export interface Settings {
   showFriends: boolean
   backgroundDim: number
   backgroundParticles: boolean
+  // backdrop-filter on every glass surface; off for weaker GPUs
+  glassBlur: boolean
+  visualiserPeaks: boolean
+  visualiserGlow: boolean
+  perfOverlay: boolean
   // a custom image is kept while a preset shows
   wallpaper: Wallpaper
   // backgroundImage/Lightness/Palette are main's; the renderer can't set them
@@ -260,4 +265,11 @@ export interface RunningState {
   startedAt: number
   // false until the process has actually been seen
   confirmed: boolean
+}
+
+// app.getAppMetrics(), for the performance overlay. cpu = % of one core since the last call
+export interface ProcessMetric {
+  type: string
+  cpu: number
+  memoryMb: number
 }

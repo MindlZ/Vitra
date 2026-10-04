@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import type { Appearance } from '@shared/types'
+import { pace } from '../lib/pace'
 import { readPalette } from '../lib/theme'
 
 // 30fps on purpose: every glass surface's backdrop-filter re-samples this canvas
@@ -18,6 +19,7 @@ interface Mote {
 }
 
 const FRAME_MS = 1000 / 30
+const SLOW_FRAME_MS = 1000 / 10
 // px² per mote
 const AREA_PER_MOTE = 26000
 const MAX_MOTES = 80
@@ -104,7 +106,10 @@ export default function Particles({ appearance }: { appearance: Appearance }) {
     let last = 0
     const tick = (time: number): void => {
       frame = requestAnimationFrame(tick)
-      if (time - last < FRAME_MS) return
+      const speed = pace()
+      if (speed === 'paused') return
+      // a little slack: rAF timestamps jitter, and a strict cap drops to 20fps on 60Hz
+      if (time - last < (speed === 'slow' ? SLOW_FRAME_MS : FRAME_MS) - 2) return
       // capped: rAF pauses while hidden, don't jump on return
       const dt = Math.min(0.1, (time - last) / 1000)
       last = time

@@ -6,6 +6,15 @@ export interface Release {
 // newest first. shown once after an update to a version listed here
 export const RELEASES: Release[] = [
   {
+    version: '0.2.1',
+    items: [
+      'Lighter on your PC, and quieter in the background',
+      'Visualiser peaks and glow',
+      'Effects settings: blur, particles, peaks, glow',
+      'Performance overlay and report'
+    ]
+  },
+  {
     version: '0.2.0',
     items: [
       'Battle.net, EA app, Ubisoft Connect and Riot games',

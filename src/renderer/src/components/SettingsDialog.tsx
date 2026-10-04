@@ -27,6 +27,7 @@ import { artUrl, forgetMissingArt } from '../lib/art'
 import { activeWallpaper, PRESETS } from '../lib/wallpapers'
 import { describeUpdate, useUpdate } from '../lib/update'
 import { RELEASES } from '../lib/changelog'
+import { perfReport } from '../lib/perf'
 import { MIN_DIM } from './Backdrop'
 import Dropdown from './Dropdown'
 import { KOFI_URL } from './Sidebar'
@@ -628,11 +629,28 @@ export default function SettingsDialog({
             className="vitra-range w-full"
           />
         </div>
+      </Card>
 
+      <Card title="Effects">
+        <ToggleRow
+          label="Blur"
+          checked={settings.glassBlur}
+          onChange={(glassBlur) => onChange({ glassBlur })}
+        />
         <ToggleRow
           label="Particles"
           checked={settings.backgroundParticles}
           onChange={(backgroundParticles) => onChange({ backgroundParticles })}
+        />
+        <ToggleRow
+          label="Visualiser peaks"
+          checked={settings.visualiserPeaks}
+          onChange={(visualiserPeaks) => onChange({ visualiserPeaks })}
+        />
+        <ToggleRow
+          label="Visualiser glow"
+          checked={settings.visualiserGlow}
+          onChange={(visualiserGlow) => onChange({ visualiserGlow })}
         />
       </Card>
 
@@ -766,6 +784,27 @@ export default function SettingsDialog({
             Show
           </button>
         </Row>
+      </Card>
+
+      <Card title="Developer">
+        <ToggleRow
+          label="Performance overlay"
+          checked={settings.perfOverlay}
+          onChange={(perfOverlay) => onChange({ perfOverlay })}
+        />
+        {settings.perfOverlay && (
+          <BackupRow
+            label="Performance report"
+            action="Export"
+            icon={<Download className="h-3.5 w-3.5" />}
+            done="Saved"
+            run={() => {
+              const report = perfReport()
+              if (!report) return Promise.resolve({ ok: false, error: 'Nothing recorded yet' })
+              return window.launcher.exportPerfReport?.(report)
+            }}
+          />
+        )}
       </Card>
 
       <Card title="What it is">

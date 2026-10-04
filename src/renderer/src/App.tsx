@@ -20,6 +20,10 @@ import ScreenSaver from './components/ScreenSaver'
 import Splash from './components/Splash'
 import TitleBar from './components/TitleBar'
 import Toast from './components/Toast'
+import { setVisualiserLook } from './components/Visualiser'
+import PerfOverlay from './components/PerfOverlay'
+import { setGameRunning } from './lib/pace'
+import { setPerfRecording, setPerfView } from './lib/perf'
 import { hasSource, inLibrary, isSoftware, matchesQuery, sourceLabel } from './lib/format'
 import { useGamepad } from './lib/gamepad'
 import { useIdle } from './lib/idle'
@@ -226,6 +230,22 @@ export default function App() {
   useEffect(() => {
     if (!loading) applyAppearance(appearance)
   }, [loading, appearance])
+
+  useEffect(() => {
+    document.documentElement.dataset.blur = settings.glassBlur ? 'on' : 'off'
+  }, [settings.glassBlur])
+
+  useEffect(() => {
+    setVisualiserLook({ peaks: settings.visualiserPeaks, glow: settings.visualiserGlow })
+  }, [settings.visualiserPeaks, settings.visualiserGlow])
+
+  const gameRunning = running.some((state) => state.confirmed)
+  useEffect(() => setGameRunning(gameRunning), [gameRunning])
+
+  useEffect(() => setPerfRecording(settings.perfOverlay), [settings.perfOverlay])
+  setPerfView(
+    settingsOpen ? 'settings' : bigPicture ? 'big picture' : selectedId ? 'game page' : String(filter)
+  )
 
   const selected = useMemo(
     // siblings too: the stand-in changes when the user picks another store
@@ -620,6 +640,8 @@ export default function App() {
       )}
 
       {splash && <Splash ready={!loading} onDone={endSplash} />}
+
+      {settings.perfOverlay && <PerfOverlay />}
     </>
   )
 }

@@ -220,11 +220,8 @@
   inset: 0;
   width: 100%;
   height: 100%;
+  /* filters are baked in (Backdrop.tsx), so no per-frame filter pass */
   object-fit: cover;
-  /* scale hides the blur bleeding in at the edges */
-  filter: blur(22px) saturate(118%) contrast(var(--wallpaper-contrast, 1))
-    brightness(var(--wallpaper-brightness, 1));
-  transform: scale(1.12);
 }
 
 .vitra-backdrop__veil {
@@ -245,9 +242,7 @@
 .vitra-backdrop__grain {
   position: absolute;
   inset: 0;
-  opacity: 0.05;
-  mix-blend-mode: overlay;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  /* the tile is drawn by Backdrop.tsx; no blend mode, so no per-frame blend pass */
 }
 
 /* reflections are flipped DOM, never -webkit-box-reflect: it's off the compositor's
@@ -1040,6 +1035,29 @@ html[data-input='gamepad'] * {
   -webkit-backdrop-filter: var(--glass-blur);
 }
 
+/* blur off. unlayered so it beats the glass utilities and backdrop-blur-*. a property
+   override, not vars: the dark-subtree token copies would re-declare them */
+html[data-blur='off'] *,
+html[data-blur='off'] *::before,
+html[data-blur='off'] *::after {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* nothing blurs what's behind now, so the surfaces that float over content get denser */
+html[data-blur='off'] .glass-chrome {
+  background-color: color-mix(in srgb, var(--glass-chrome), var(--color-base) 55%);
+}
+
+html[data-blur='off'] .glass-strong {
+  background-color: color-mix(in srgb, var(--glass-fill-strong), var(--color-base) 50%);
+}
+
+/* the carousel's tucked rows would show through */
+html[data-blur='off'] .vitra-store-row {
+  background-color: color-mix(in srgb, var(--color-raised) 92%, transparent);
+}
+
 @utility hairline-b {
   border-bottom: 1px solid var(--glass-line-soft);
 }
@@ -1114,4 +1132,10 @@ html[data-input='gamepad'] * {
 
 @utility no-drag {
   -webkit-app-region: no-drag;
+}
+
+/* endless animations hold the compositor at full rate; not while another window has focus */
+html[data-focus='off'] .vitra-colon,
+html[data-focus='off'] .animate-pulse-dot {
+  animation-play-state: paused;
 }

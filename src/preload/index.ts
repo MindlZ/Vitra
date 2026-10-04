@@ -68,6 +68,8 @@ const api: LauncherApi = {
     return () => ipcRenderer.removeListener('window:maximized', listener)
   },
   getAppInfo: () => ipcRenderer.invoke('app:info'),
+  getMetrics: () => ipcRenderer.invoke('app:metrics'),
+  exportPerfReport: (recording: object) => ipcRenderer.invoke('perf:export', recording),
   onOpenBigPicture: (callback: () => void) => {
     const listener = (): void => callback()
     ipcRenderer.on('app:open-big-picture', listener)

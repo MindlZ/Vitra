@@ -7,6 +7,7 @@ import type {
   MediaState,
   PlaySession,
   PowerAction,
+  ProcessMetric,
   RunningState,
   ScanResult,
   Settings,
@@ -73,6 +74,9 @@ export interface LauncherApi {
   isMaximized(): Promise<boolean>
   onMaximizedChanged(callback: (maximized: boolean) => void): () => void
   getAppInfo(): Promise<{ packaged: boolean; version: string; discordConfigured?: boolean }>
+  getMetrics(): Promise<ProcessMetric[]>
+  // main adds system info, then a save dialog
+  exportPerfReport(recording: object): Promise<{ ok: boolean; error?: string }>
   onOpenBigPicture(callback: () => void): () => void
 
   onLibraryChanged(callback: () => void): () => void
