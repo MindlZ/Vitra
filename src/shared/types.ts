@@ -95,6 +95,7 @@ export interface Settings {
   glassBlur: boolean
   visualiserPeaks: boolean
   visualiserGlow: boolean
+  slowWhenUnfocused: boolean
   perfOverlay: boolean
   // a custom image is kept while a preset shows
   wallpaper: Wallpaper

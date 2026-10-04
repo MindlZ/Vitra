@@ -15,6 +15,7 @@ const DEFAULT_SETTINGS: Settings = {
   glassBlur: true,
   visualiserPeaks: true,
   visualiserGlow: true,
+  slowWhenUnfocused: true,
   perfOverlay: false,
   wallpaper: 'sunset',
   theme: 'auto',

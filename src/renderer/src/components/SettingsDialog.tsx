@@ -652,6 +652,11 @@ export default function SettingsDialog({
           checked={settings.visualiserGlow}
           onChange={(visualiserGlow) => onChange({ visualiserGlow })}
         />
+        <ToggleRow
+          label="Slow down in the background"
+          checked={settings.slowWhenUnfocused}
+          onChange={(slowWhenUnfocused) => onChange({ slowWhenUnfocused })}
+        />
       </Card>
 
       <Card title="Screen saver">

@@ -22,7 +22,7 @@ import TitleBar from './components/TitleBar'
 import Toast from './components/Toast'
 import { setVisualiserLook } from './components/Visualiser'
 import PerfOverlay from './components/PerfOverlay'
-import { setGameRunning } from './lib/pace'
+import { setBackgroundPacing, setGameRunning } from './lib/pace'
 import { setPerfRecording, setPerfView } from './lib/perf'
 import { hasSource, inLibrary, isSoftware, matchesQuery, sourceLabel } from './lib/format'
 import { useGamepad } from './lib/gamepad'
@@ -241,6 +241,7 @@ export default function App() {
 
   const gameRunning = running.some((state) => state.confirmed)
   useEffect(() => setGameRunning(gameRunning), [gameRunning])
+  useEffect(() => setBackgroundPacing(settings.slowWhenUnfocused), [settings.slowWhenUnfocused])
 
   useEffect(() => setPerfRecording(settings.perfOverlay), [settings.perfOverlay])
   setPerfView(

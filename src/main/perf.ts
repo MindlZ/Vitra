@@ -9,6 +9,7 @@ const SETTINGS = [
   'backgroundParticles',
   'visualiserPeaks',
   'visualiserGlow',
+  'slowWhenUnfocused',
   'backgroundDim',
   'wallpaper',
   'theme',
