@@ -43,9 +43,9 @@ It reads the files your launchers already keep. No accounts, no sign-in. Games
 still launch through their own store, so ownership, cloud saves and anti-cheat
 are untouched.
 
-Vitra is made with [Claude Code](https://www.anthropic.com/claude-code),
-Anthropic's AI coding tool. MindlZ decides what Vitra is and how it looks,
-and tests every change; Claude Code writes much of the code.
+I make Vitra with [Claude Code](https://www.anthropic.com/claude-code),
+Anthropic's AI coding tool. I decide what Vitra does and how it looks, and I
+test every change; Claude Code writes much of the code.
 
 ## Contents
 
