@@ -60,7 +60,7 @@ export function ownedSteamGame(appId: string, name: string): Game {
   }
 }
 
-async function readLibraryFolders(steamPath: string): Promise<string[]> {
+export async function readLibraryFolders(steamPath: string): Promise<string[]> {
   const roots = new Set<string>([steamPath])
   const file = join(steamPath, 'steamapps', 'libraryfolders.vdf')
 

@@ -96,15 +96,41 @@ export interface Settings {
   visualiserPeaks: boolean
   visualiserGlow: boolean
   slowWhenUnfocused: boolean
+  visualiserWidget: boolean
+  // fetched from lrclib.net, so opt-in
+  lyrics: boolean
+  // where they show, under the lyrics switch
+  lyricsHome: boolean
+  lyricsBigPicture: boolean
+  lyricsSaver: boolean
+  // its own floating window, like the visualiser one
+  lyricsWidget: boolean
+  lyricsWidgetSize: WidgetSize
+  // main sets it when the widget is dragged
+  lyricsWidgetPos?: { x: number; y: number }
+  visualiserWidgetSize: WidgetSize
+  // main sets it when the widget is dragged
+  visualiserWidgetPos?: { x: number; y: number }
   perfOverlay: boolean
+  // main sets it as the window moves
+  windowState?: { x: number; y: number; width: number; height: number; maximized: boolean }
   // a custom image is kept while a preset shows
   wallpaper: Wallpaper
   // backgroundImage/Lightness/Palette are main's; the renderer can't set them
   backgroundImage?: string
   backgroundLightness?: number
   backgroundPalette?: Palette
+  // main's copies of the desktop wallpaper, one per screen; stamp is the sources'
+  // path+mtime+size, so main knows when to re-copy
+  desktopScreens?: DesktopScreen[]
+  desktopStamp?: string
+  // which of desktopScreens shows
+  desktopScreen: number
   theme: Theme
-  matchBackgroundColours: boolean
+  // wallpaper = sampled from it, vitra = the stylesheet's magenta, custom = hue/chroma
+  accentSource: AccentSource
+  accentHue: number
+  accentChroma: number
   programsView: ProgramsView
   bigPictureOnStart: boolean
   closeToTray: boolean
@@ -120,11 +146,22 @@ export interface Settings {
 
 export type ProgramsView = 'library' | 'tab' | 'hidden'
 
+export type WidgetSize = 'small' | 'medium' | 'large'
+export type WidgetKind = 'visualiser' | 'lyrics'
+
 export type Theme = 'auto' | 'light' | 'dark'
 export type Appearance = 'light' | 'dark'
 
 export type WallpaperPreset = 'sunset' | 'smoke' | 'tree' | 'moon'
-export type Wallpaper = WallpaperPreset | 'custom'
+export type Wallpaper = WallpaperPreset | 'custom' | 'desktop'
+
+export type AccentSource = 'wallpaper' | 'vitra' | 'custom'
+
+export interface DesktopScreen {
+  image: string
+  palette?: Palette
+  lightness?: number
+}
 
 // #rrggbb. accent = primary, accentStrong = its hover, ember = favourites only, tint = sun core
 export interface Palette {
@@ -273,4 +310,10 @@ export interface ProcessMetric {
   type: string
   cpu: number
   memoryMb: number
+}
+
+// a synced lyric line; at = ms into the track
+export interface LyricLine {
+  at: number
+  text: string
 }

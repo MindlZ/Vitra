@@ -3,4 +3,5 @@ out/
 dist/
 *.log
 CLAUDE.md
+docs/decisions.md
 *.tsbuildinfo

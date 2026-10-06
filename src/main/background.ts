@@ -1,8 +1,14 @@
-import { nativeImage } from 'electron'
-import { promises as fs } from 'fs'
-import { extname, join } from 'path'
+import { nativeImage, screen } from 'electron'
+import type { NativeImage, Rectangle } from 'electron'
+import { existsSync, promises as fs } from 'fs'
+import { userInfo } from 'os'
+import { dirname, extname, join } from 'path'
+import { findSteamPath, readRegistryValue } from './paths'
+import { readLibraryFolders } from './scanners/steam'
+import { listRunningProcesses } from './watcher'
 import { artDir, getSettings, publicSettings, setSettings } from './store'
-import type { Palette, Settings } from '../shared/types'
+import { toHex } from '../shared/oklch'
+import type { DesktopScreen, Palette, Settings } from '../shared/types'
 
 // OKLCH, not HSL: equal L looks equally bright across hues, so the accent always
 // lands where the magenta does (L 0.75) and black text on it stays readable
@@ -27,42 +33,6 @@ function toOklch(r: number, g: number, b: number): [number, number, number] {
   const B = 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s
   const hue = (Math.atan2(B, A) * 180) / Math.PI
   return [L, Math.hypot(A, B), hue < 0 ? hue + 360 : hue]
-}
-
-// unclamped, so the caller can tell if it's out of gamut
-function oklchToLinear(L: number, C: number, hue: number): [number, number, number] {
-  const h = (hue * Math.PI) / 180
-  const a = C * Math.cos(h)
-  const b = C * Math.sin(h)
-  const l = Math.pow(L + 0.3963377774 * a + 0.2158037573 * b, 3)
-  const m = Math.pow(L - 0.1055613458 * a - 0.0638541728 * b, 3)
-  const s = Math.pow(L - 0.0894841775 * a - 1.291485548 * b, 3)
-  return [
-    4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
-    -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
-    -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s
-  ]
-}
-
-// out of gamut: give up chroma, never lightness or hue
-function toHex(L: number, C: number, hue: number): string {
-  let rgb = oklchToLinear(L, C, hue)
-  while (C > 0 && rgb.some((v) => v < -0.0005 || v > 1.0005)) {
-    C = Math.max(0, C - 0.004)
-    rgb = oklchToLinear(L, C, hue)
-  }
-  return (
-    '#' +
-    rgb
-      .map((v) => {
-        const c = Math.min(1, Math.max(0, v))
-        const e = c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055
-        return Math.round(e * 255)
-          .toString(16)
-          .padStart(2, '0')
-      })
-      .join('')
-  )
 }
 
 function binDistance(a: number, b: number): number {
@@ -213,6 +183,187 @@ export async function setBackground(source: string): Promise<Settings> {
   })
   if (previous && previous !== filename) await fs.rm(join(artDir(), previous), { force: true })
   return publicSettings()
+}
+
+// thumb: shell thumbnail (a video frame, a gif's first frame), else decoded as is.
+// span: may be one image across every monitor, sliced per screen if its shape fits
+interface DesktopSource {
+  path: string
+  thumb: boolean
+  span?: boolean
+}
+
+const WE_EXES = ['wallpaper64.exe', 'wallpaper32.exe']
+
+async function wallpaperEngineProject(file: string): Promise<DesktopSource | undefined> {
+  if (!existsSync(file)) return undefined
+  const folder = dirname(file)
+  let project: { type?: string; preview?: string } = {}
+  try {
+    project = JSON.parse(await fs.readFile(join(folder, 'project.json'), 'utf8'))
+  } catch {
+    // no project.json: no preview to find
+  }
+  // a video's own frame beats the small square preview
+  if (project.type?.toLowerCase() === 'video') return { path: file, thumb: true }
+  const preview = project.preview ? join(folder, project.preview) : undefined
+  if (preview && existsSync(preview)) return { path: preview, thumb: !/\.(jpe?g|png)$/i.test(preview) }
+  return undefined
+}
+
+// config.json: { <user>: { general: { wallpaperconfig: { selectedwallpapers:
+// { Monitor0: { file }, Monitor1: ... } } } } }. file is the project's main file;
+// project.json beside it names the preview. WE's numbering isn't Electron's, so
+// screens are told apart by their thumbnails in Settings
+async function wallpaperEngineSources(): Promise<DesktopSource[]> {
+  const steam = await findSteamPath(getSettings().steamPath)
+  if (!steam) return []
+  let config: string | undefined
+  for (const root of await readLibraryFolders(steam)) {
+    const candidate = join(root, 'steamapps', 'common', 'wallpaper_engine', 'config.json')
+    if (existsSync(candidate)) config = candidate
+  }
+  if (!config) return []
+  const running = await listRunningProcesses()
+  if (!WE_EXES.some((exe) => running.has(exe))) return []
+
+  type Selected = Record<string, { file?: string }>
+  const users = JSON.parse(await fs.readFile(config, 'utf8')) as Record<
+    string,
+    { general?: { wallpaperconfig?: { selectedwallpapers?: Selected } } }
+  >
+  const user = users[userInfo().username] ?? Object.values(users).find((u) => u?.general?.wallpaperconfig)
+  const selected = user?.general?.wallpaperconfig?.selectedwallpapers ?? {}
+  // monitors unplugged since keep their entry: only as many as there are screens
+  const files = Object.entries(selected)
+    .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }))
+    .slice(0, screen.getAllDisplays().length)
+    .map(([, pick]) => pick?.file)
+
+  const sources: DesktopSource[] = []
+  for (const file of files) {
+    const source = file ? await wallpaperEngineProject(file) : undefined
+    if (source) sources.push(source)
+  }
+  return sources
+}
+
+// wallpaper engine first: what it pushes to windows lags behind and spans every
+// monitor. then windows' per-monitor copies (Transcoded_000...), then its single
+// copy (slideshows included), then the registry path (can point at a moved file)
+async function desktopSources(): Promise<DesktopSource[]> {
+  try {
+    const engine = await wallpaperEngineSources()
+    if (engine.length) return engine
+  } catch (err) {
+    console.warn('[background] could not read wallpaper engine:', (err as Error).message)
+  }
+  const themes = join(process.env.APPDATA ?? '', 'Microsoft', 'Windows', 'Themes')
+  const perMonitor = (await fs.readdir(themes).catch(() => [] as string[]))
+    .filter((name) => /^Transcoded_\d{3}$/.test(name))
+    .sort()
+  if (perMonitor.length > 1) return perMonitor.map((name) => ({ path: join(themes, name), thumb: false }))
+  const transcoded = join(themes, 'TranscodedWallpaper')
+  if (existsSync(transcoded)) return [{ path: transcoded, thumb: false, span: true }]
+  const registered = await readRegistryValue('HKCU\\Control Panel\\Desktop', 'WallPaper')
+  return registered && existsSync(registered) ? [{ path: registered, thumb: false, span: true }] : []
+}
+
+// a spanned wallpaper is laid over the screens' physical rects; slices in
+// left-to-right order. undefined = one screen, or the image isn't that shape
+function spanSlices(width: number, height: number): Rectangle[] | undefined {
+  const rects = screen
+    .getAllDisplays()
+    .map((display) => screen.dipToScreenRect(null, display.bounds))
+    .sort((a, b) => a.x - b.x || a.y - b.y)
+  if (rects.length < 2) return undefined
+  const left = Math.min(...rects.map((r) => r.x))
+  const top = Math.min(...rects.map((r) => r.y))
+  const spanW = Math.max(...rects.map((r) => r.x + r.width)) - left
+  const spanH = Math.max(...rects.map((r) => r.y + r.height)) - top
+  if (Math.abs(width / height - spanW / spanH) > 0.03 * (spanW / spanH)) return undefined
+  const sx = width / spanW
+  const sy = height / spanH
+  return rects.map((r) => ({
+    x: Math.round((r.x - left) * sx),
+    y: Math.round((r.y - top) * sy),
+    width: Math.round(r.width * sx),
+    height: Math.round(r.height * sy)
+  }))
+}
+
+let syncing: Promise<boolean> | undefined
+
+// copies the desktop wallpaper into art\, one image per screen, when it changed.
+// true = settings changed
+export function syncDesktopWallpaper(): Promise<boolean> {
+  syncing ??= syncDesktop().finally(() => (syncing = undefined))
+  return syncing
+}
+
+async function syncDesktop(): Promise<boolean> {
+  try {
+    const sources = await desktopSources()
+    if (!sources.length) return false
+    const stats = await Promise.all(sources.map((source) => fs.stat(source.path)))
+    // screens are in it too: plugging one in changes how a span slices
+    const layout = screen
+      .getAllDisplays()
+      .map(({ bounds: b }) => `${b.x},${b.y},${b.width},${b.height}`)
+      .join(';')
+    const stamp =
+      sources.map((source, i) => `${source.path}|${stats[i].mtimeMs}:${stats[i].size}`).join('>') + `#${layout}`
+    const { desktopScreens: previous = [], desktopStamp } = getSettings()
+    if (
+      previous.length &&
+      desktopStamp === stamp &&
+      previous.every((shot) => existsSync(join(artDir(), shot.image)))
+    ) {
+      return false
+    }
+
+    const images: NativeImage[] = []
+    for (const source of sources) {
+      // from a buffer: nativeImage decodes by content, and TranscodedWallpaper has no extension
+      const image = source.thumb
+        ? await nativeImage.createThumbnailFromPath(source.path, { width: 1920, height: 1080 })
+        : nativeImage.createFromBuffer(await fs.readFile(source.path))
+      if (image.isEmpty()) continue
+      const { width, height } = image.getSize()
+      const slices = source.span ? spanSlices(width, height) : undefined
+      if (slices) images.push(...slices.map((rect) => image.crop(rect)))
+      else images.push(image)
+    }
+    if (!images.length) return false
+
+    await fs.mkdir(artDir(), { recursive: true })
+    const now = Date.now()
+    const screens: DesktopScreen[] = []
+    for (const [i, image] of images.entries()) {
+      const filename = `desktop-${now}-${i}.jpg`
+      const target = join(artDir(), filename)
+      const sized = image.getSize().width > 2560 ? image.resize({ width: 2560, quality: 'good' }) : image
+      await fs.writeFile(target, sized.toJPEG(90))
+      const shot: DesktopScreen = { image: filename }
+      try {
+        shot.palette = extractPalette(target)
+        shot.lightness = measureLightness(target)
+      } catch (err) {
+        console.warn('[background] could not sample desktop colours:', (err as Error).message)
+      }
+      screens.push(shot)
+    }
+    setSettings({ desktopScreens: screens, desktopStamp: stamp })
+
+    const keep = new Set(screens.map((shot) => shot.image))
+    for (const name of await fs.readdir(artDir())) {
+      if (/^desktop-.+\.jpg$/.test(name) && !keep.has(name)) await fs.rm(join(artDir(), name), { force: true })
+    }
+    return true
+  } catch (err) {
+    console.warn('[background] could not read the desktop wallpaper:', (err as Error).message)
+    return false
+  }
 }
 
 // images picked before lightness existed

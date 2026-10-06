@@ -1,26 +1,28 @@
 import { useEffect, useState } from 'react'
 import type { ProcessMetric } from '@shared/types'
 
-// one recorder behind the overlay and the export. single poller on purpose:
-// getAppMetrics' cpu is "since the last call", so two callers would split it
+// frames are measured here; process cost is sampled by main (main/perf.ts), which
+// keeps going while this window is hidden. the overlay reads main's latest sample
 
-export interface PerfSample {
+export interface FrameSample {
   at: number
   view: string
-  focused: boolean
   fps: number
   worstFrame: number
   longTasks: number
   heapMb?: number
-  // latest metrics poll; cpu = % of one core
+}
+
+export interface OverlaySample extends FrameSample {
   processes: ProcessMetric[]
 }
 
-const HISTORY = 120
+// 1s each; frames only exist while the window is shown
+const HISTORY = 600
 const METRICS_MS = 2000
 
-const history: PerfSample[] = []
-const listeners = new Set<(sample: PerfSample) => void>()
+const frames: FrameSample[] = []
+const listeners = new Set<(sample: OverlaySample) => void>()
 let view = 'home'
 let stop: (() => void) | null = null
 
@@ -36,28 +38,39 @@ function start(): () => void {
   let windowStart = previous
   let longTasks = 0
   let processes: ProcessMetric[] = []
+  // rAF stops while hidden: the gap on return is a pause, not a slow frame
+  let resumed = true
+
+  const onVisibility = (): void => {
+    if (document.visibilityState === 'visible') resumed = true
+  }
+  document.addEventListener('visibilitychange', onVisibility)
 
   const tick = (time: number): void => {
     raf = requestAnimationFrame(tick)
+    if (resumed) {
+      resumed = false
+      previous = windowStart = time
+      count = worst = longTasks = 0
+      return
+    }
     count++
     worst = Math.max(worst, time - previous)
     previous = time
     if (time - windowStart < 1000) return
     // non-standard, chromium only
     const memory = (performance as Performance & { memory?: { usedJSHeapSize: number } }).memory
-    const sample: PerfSample = {
+    const sample: FrameSample = {
       at: Date.now(),
       view,
-      focused: document.hasFocus(),
       fps: Math.round((count * 1000) / (time - windowStart)),
       worstFrame: Math.round(worst),
       longTasks,
-      heapMb: memory && Math.round(memory.usedJSHeapSize / 1048576),
-      processes
+      heapMb: memory && Math.round(memory.usedJSHeapSize / 1048576)
     }
-    history.push(sample)
-    if (history.length > HISTORY) history.shift()
-    listeners.forEach((listener) => listener(sample))
+    frames.push(sample)
+    if (frames.length > HISTORY) frames.shift()
+    listeners.forEach((listener) => listener({ ...sample, processes }))
     count = 0
     worst = 0
     longTasks = 0
@@ -87,6 +100,7 @@ function start(): () => void {
     cancelAnimationFrame(raf)
     observer?.disconnect()
     clearInterval(timer)
+    document.removeEventListener('visibilitychange', onVisibility)
   }
 }
 
@@ -95,12 +109,12 @@ export function setPerfRecording(on: boolean): void {
   else {
     stop?.()
     stop = null
-    history.length = 0
+    frames.length = 0
   }
 }
 
-export function usePerfSample(): PerfSample | undefined {
-  const [sample, setSample] = useState<PerfSample | undefined>(history[history.length - 1])
+export function useOverlaySample(): OverlaySample | undefined {
+  const [sample, setSample] = useState<OverlaySample>()
   useEffect(() => {
     listeners.add(setSample)
     return () => {
@@ -108,6 +122,13 @@ export function usePerfSample(): PerfSample | undefined {
     }
   }, [])
   return sample
+}
+
+// main merges these with its process samples; both are cleared once it's saved
+export async function exportPerfReport(): Promise<{ ok: boolean; error?: string }> {
+  const result = await window.launcher.exportPerfReport([...frames])
+  if (result.ok) frames.length = 0
+  return result
 }
 
 export function roleOf(type: string): string {
@@ -124,54 +145,9 @@ export function totals(processes: ProcessMetric[]): { cpu: number; memoryMb: num
   return { cpu, memoryMb }
 }
 
-// same formula as scripts/perf.ps1, minus the gpu term (no counter in here)
+// same formula as main/perf.ts and scripts/perf.ps1 (minus its gpu term)
 export function score(cpu: number, memoryMb: number): number {
   const penalty = (value: number, free: number, perUnit: number, max: number): number =>
     Math.min(max, Math.max(0, (value - free) * perUnit))
   return Math.round(Math.max(0, 100 - penalty(cpu, 3, 2.5, 45) - penalty(memoryMb, 450, 0.05, 20)))
-}
-
-const average = (values: number[]): number =>
-  values.length ? values.reduce((sum, v) => sum + v, 0) / values.length : 0
-
-const round = (value: number): number => Math.round(value * 10) / 10
-
-function percentile(values: number[], p: number): number {
-  if (!values.length) return 0
-  const sorted = [...values].sort((a, b) => a - b)
-  return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))]
-}
-
-function summarise(samples: PerfSample[]) {
-  // the first poll's cpu is always 0
-  const measured = samples.filter((s) => s.processes.length && totals(s.processes).cpu > 0)
-  const cpu = average(measured.map((s) => totals(s.processes).cpu))
-  const memoryMb = Math.max(0, ...samples.map((s) => totals(s.processes).memoryMb))
-  const byRole: Record<string, number> = {}
-  for (const s of measured) {
-    for (const p of s.processes) byRole[roleOf(p.type)] = (byRole[roleOf(p.type)] ?? 0) + p.cpu
-  }
-  for (const role of Object.keys(byRole)) byRole[role] = round(byRole[role] / (measured.length || 1))
-  return {
-    seconds: samples.length,
-    fps: round(average(samples.map((s) => s.fps))),
-    worstFrameP95: percentile(samples.map((s) => s.worstFrame), 0.95),
-    worstFrameMax: Math.max(0, ...samples.map((s) => s.worstFrame)),
-    longTasks: samples.reduce((sum, s) => sum + s.longTasks, 0),
-    cpu: round(cpu),
-    cpuByRole: byRole,
-    memoryMb: Math.round(memoryMb),
-    score: score(cpu, memoryMb)
-  }
-}
-
-export function perfReport(): object | null {
-  if (!history.length) return null
-  const samples = [...history]
-  const views = [...new Set(samples.map((s) => s.view))]
-  return {
-    summary: summarise(samples),
-    byView: Object.fromEntries(views.map((v) => [v, summarise(samples.filter((s) => s.view === v))])),
-    samples
-  }
 }

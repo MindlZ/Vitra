@@ -22,6 +22,7 @@ import TitleBar from './components/TitleBar'
 import Toast from './components/Toast'
 import { setVisualiserLook } from './components/Visualiser'
 import PerfOverlay from './components/PerfOverlay'
+import { setLyricsPlaces } from './lib/lyrics'
 import { setBackgroundPacing, setGameRunning } from './lib/pace'
 import { setPerfRecording, setPerfView } from './lib/perf'
 import { hasSource, inLibrary, isSoftware, matchesQuery, sourceLabel } from './lib/format'
@@ -29,6 +30,7 @@ import { useGamepad } from './lib/gamepad'
 import { useIdle } from './lib/idle'
 import { playSound, stopSound } from './lib/sound'
 import { applyAppearance, applyPalette } from './lib/theme'
+import { paletteFromHue } from '@shared/oklch'
 import { activeWallpaper, appearanceFor } from './lib/wallpapers'
 import { useLibrary } from './lib/useLibrary'
 
@@ -220,7 +222,12 @@ export default function App() {
   // wait for real settings: the defaults have no palette, so clearing the cached
   // one would flash magenta
   const wallpaper = activeWallpaper(settings)
-  const palette = settings.matchBackgroundColours ? wallpaper.palette : undefined
+  const palette =
+    settings.accentSource === 'custom'
+      ? paletteFromHue(settings.accentHue, settings.accentChroma)
+      : settings.accentSource === 'wallpaper'
+        ? wallpaper.palette
+        : undefined
   const paletteKey = palette ? JSON.stringify(palette) : ''
   useEffect(() => {
     if (!loading) applyPalette(paletteKey ? (JSON.parse(paletteKey) as Palette) : undefined)
@@ -242,6 +249,11 @@ export default function App() {
   const gameRunning = running.some((state) => state.confirmed)
   useEffect(() => setGameRunning(gameRunning), [gameRunning])
   useEffect(() => setBackgroundPacing(settings.slowWhenUnfocused), [settings.slowWhenUnfocused])
+  const { lyrics, lyricsHome, lyricsBigPicture, lyricsSaver } = settings
+  useEffect(
+    () => setLyricsPlaces({ home: lyrics && lyricsHome, tv: lyrics && lyricsBigPicture, saver: lyrics && lyricsSaver }),
+    [lyrics, lyricsHome, lyricsBigPicture, lyricsSaver]
+  )
 
   useEffect(() => setPerfRecording(settings.perfOverlay), [settings.perfOverlay])
   setPerfView(

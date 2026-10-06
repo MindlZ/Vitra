@@ -16,10 +16,22 @@ const DEFAULT_SETTINGS: Settings = {
   visualiserPeaks: true,
   visualiserGlow: true,
   slowWhenUnfocused: true,
+  visualiserWidget: false,
+  lyrics: false,
+  lyricsHome: true,
+  lyricsBigPicture: true,
+  lyricsSaver: true,
+  lyricsWidget: false,
+  lyricsWidgetSize: 'medium',
+  visualiserWidgetSize: 'medium',
   perfOverlay: false,
   wallpaper: 'sunset',
+  desktopScreen: 0,
   theme: 'auto',
-  matchBackgroundColours: true,
+  accentSource: 'wallpaper',
+  // the brand magenta
+  accentHue: 344,
+  accentChroma: 0.2,
   programsView: 'library',
   bigPictureOnStart: false,
   closeToTray: true,
@@ -76,6 +88,14 @@ function decryptSecrets(block: SecretBlock | undefined): Partial<Settings> {
   return out
 }
 
+// pre-accentSource files had a "match colours" switch; off meant the magenta
+function migrateAccent(settings: Settings & { matchBackgroundColours?: boolean }): void {
+  if (settings.matchBackgroundColours === false && settings.accentSource === 'wallpaper') {
+    settings.accentSource = 'vitra'
+  }
+  delete settings.matchBackgroundColours
+}
+
 export async function load(): Promise<LibraryData> {
   let migrate = false
   try {
@@ -84,6 +104,7 @@ export async function load(): Promise<LibraryData> {
     const settings = { ...DEFAULT_SETTINGS, ...(parsed.settings ?? {}) }
     // pre-presets files
     if (!parsed.settings?.wallpaper && settings.backgroundImage) settings.wallpaper = 'custom'
+    migrateAccent(settings)
     // pre-encryption files had plain keys: rewrite straight away
     migrate = SECRET_KEYS.some((key) => Boolean(parsed.settings?.[key]))
     data = {
@@ -198,6 +219,7 @@ export function removeGame(id: string): boolean {
 // keeps this PC's keys; backups never carry them
 export function restoreLibrary(games: Array<Partial<Game>>, settings: Partial<Settings>): Promise<void> {
   const next: Settings = { ...DEFAULT_SETTINGS, ...settings }
+  migrateAccent(next)
   for (const key of SECRET_KEYS) next[key] = data.settings[key]
   delete next.keysSet
   data = { ...data, games: games.map(normaliseGame), settings: next }

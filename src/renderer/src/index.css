@@ -1134,6 +1134,12 @@ html[data-blur='off'] .vitra-store-row {
   -webkit-app-region: no-drag;
 }
 
+/* the floating visualiser window is transparent */
+html[data-widget],
+html[data-widget] body {
+  background: transparent;
+}
+
 /* endless animations hold the compositor at full rate; not while another window has focus */
 html[data-focus='off'] .vitra-colon,
 html[data-focus='off'] .animate-pulse-dot {

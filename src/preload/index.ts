@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { ArtKind, LauncherApi } from '../shared/api'
+import type { ArtKind, LauncherApi, WidgetState } from '../shared/api'
 import type {
   Game,
   MediaCommand,
@@ -8,6 +8,7 @@ import type {
   RunningState,
   Settings,
   UpdateState,
+  WidgetKind,
   WindowAction
 } from '../shared/types'
 
@@ -69,7 +70,15 @@ const api: LauncherApi = {
   },
   getAppInfo: () => ipcRenderer.invoke('app:info'),
   getMetrics: () => ipcRenderer.invoke('app:metrics'),
-  exportPerfReport: (recording: object) => ipcRenderer.invoke('perf:export', recording),
+  exportPerfReport: (frames: object[]) => ipcRenderer.invoke('perf:export', frames),
+  getLyrics: (track: { title: string; artist: string; album?: string; durationMs?: number }) =>
+    ipcRenderer.invoke('lyrics:get', track),
+  moveWidget: (kind: WidgetKind, on: boolean) => ipcRenderer.invoke('widget:move', kind, on),
+  onWidgetState: (callback: (state: WidgetState) => void) => {
+    const listener = (_e: unknown, state: WidgetState): void => callback(state)
+    ipcRenderer.on('widget:state', listener)
+    return () => ipcRenderer.removeListener('widget:state', listener)
+  },
   onOpenBigPicture: (callback: () => void) => {
     const listener = (): void => callback()
     ipcRenderer.on('app:open-big-picture', listener)

@@ -3,7 +3,7 @@ import type { Appearance, Palette } from '@shared/types'
 // cached in localStorage so first paint is already the right colour
 
 const STORAGE_KEY = 'vitra.palette'
-function triple(hex: string): string {
+export function triple(hex: string): string {
   const n = parseInt(hex.slice(1), 16)
   return `${(n >> 16) & 255} ${(n >> 8) & 255} ${n & 255}`
 }
@@ -62,6 +62,8 @@ export function readPalette(el: Element = document.documentElement): {
   peak: string
   mid: string
   line: string
+  // the bars' foot; the screen saver gives it alpha so they fade downwards
+  bottom: string
 } {
   const css = getComputedStyle(el)
   const accent = css.getPropertyValue('--accent-rgb').trim() || '255 110 203'
@@ -71,6 +73,7 @@ export function readPalette(el: Element = document.documentElement): {
     tint,
     peak: css.getPropertyValue('--vis-peak').trim() || '#fff1fa',
     mid: css.getPropertyValue('--vis-mid').trim() || `rgb(${tint})`,
-    line: css.getPropertyValue('--vis-line').trim() || 'rgba(255,255,255,0.75)'
+    line: css.getPropertyValue('--vis-line').trim() || 'rgba(255,255,255,0.75)',
+    bottom: css.getPropertyValue('--vis-bottom').trim() || `rgb(${accent})`
   }
 }

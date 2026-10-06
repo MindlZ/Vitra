@@ -5,6 +5,7 @@ import { useArt } from '../lib/art'
 import { formatLastPlayed, formatPlaytime, hueFor, isSoftware } from '../lib/format'
 import { joinFriend, STATE_DOT, STATE_LABEL, useFriends } from '../lib/friends'
 import NowPlaying from './NowPlaying'
+import Lyrics from './Lyrics'
 import Visualiser from './Visualiser'
 
 interface Props {
@@ -298,6 +299,7 @@ export default function Home({ games, running, onOpen, onPlay, onBrowse, onOpenS
         <div className="flex min-h-[52px] w-full shrink-0 justify-center">
           <NowPlaying />
         </div>
+        <Lyrics place="home" className="mt-1 w-full max-w-[560px] shrink-0" />
       </div>
 
       <div className="mx-auto flex w-full max-w-[1080px] shrink-0 items-end justify-between gap-6 px-6 pt-4 pb-6">

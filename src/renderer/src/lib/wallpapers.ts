@@ -1,4 +1,4 @@
-import type { Appearance, Palette, Settings, WallpaperPreset } from '@shared/types'
+import type { Appearance, DesktopScreen, Palette, Settings, WallpaperPreset } from '@shared/types'
 import sunset from '../assets/wallpapers/sunset.jpg'
 import smoke from '../assets/wallpapers/smoke.jpg'
 import tree from '../assets/wallpapers/tree.jpg'
@@ -68,15 +68,32 @@ export function appearanceFor(settings: Settings, wallpaper: ActiveWallpaper): A
   return (wallpaper.lightness ?? 0) >= LIGHT_FROM ? 'light' : 'dark'
 }
 
+// the chosen screen's copy; first screen if that one's gone (unplugged)
+export function desktopShot(settings: Settings): DesktopScreen | undefined {
+  const screens = settings.desktopScreens ?? []
+  return screens[settings.desktopScreen] ?? screens[0]
+}
+
 // the one place that decides image + palette
 export function activeWallpaper(settings: Settings): ActiveWallpaper {
   const preset = presetFor(settings.wallpaper)
   if (settings.wallpaper === 'custom' && settings.backgroundImage) {
     return {
-      src: artUrl(settings.backgroundImage),
+      // the bake draws at 640 wide; no need to decode a 4k original
+      src: artUrl(settings.backgroundImage, 1280),
       fallback: preset.src,
       palette: settings.backgroundPalette,
       lightness: settings.backgroundLightness,
+      fallbackLightness: preset.lightness
+    }
+  }
+  const shot = desktopShot(settings)
+  if (settings.wallpaper === 'desktop' && shot) {
+    return {
+      src: artUrl(shot.image, 1280),
+      fallback: preset.src,
+      palette: shot.palette,
+      lightness: shot.lightness,
       fallbackLightness: preset.lightness
     }
   }

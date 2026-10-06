@@ -8,7 +8,8 @@ how long you play and lets you organise it all with favourites and tags.
 Everything is read from local store files. No accounts, no API keys. The only
 network traffic is cover art from Valve's CDN, name lookups on Steam's public
 store endpoint, and a check for new versions on this project's GitHub Releases
-(which can be turned off).
+(which can be turned off). Lyrics, if you turn them on, come from lrclib.net,
+which is sent the title, artist, album and length of what's playing.
 
 ## Stack
 

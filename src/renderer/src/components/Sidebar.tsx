@@ -57,7 +57,8 @@ const STORE_LOGOS: Partial<Record<Filter, StoreLogoKind>> = {
   'source:battlenet': 'battlenet',
   'source:ea': 'ea',
   'source:ubisoft': 'ubisoft',
-  'source:riot': 'riot'
+  'source:riot': 'riot',
+  'source:manual': 'manual'
 }
 
 function Monogram({ label, active }: { label: string; active: boolean }) {
@@ -147,11 +148,22 @@ const DEPTH = [
   { y: 31, scale: 0.92, fade: 0.55 },
   { y: 58, scale: 0.84, fade: 0.25 }
 ]
+// collapsed rail: three, none faded (faded icons with no labels read as not loaded).
+// the edge rows fade out on their outer side instead (EDGE_FADE)
+const RAIL_DEPTH = [
+  { y: 0, scale: 1, fade: 1 },
+  { y: 30, scale: 0.9, fade: 1 }
+]
 const ROW_HEIGHT = 34
 // room for a "more" chevron at each end
 const INDICATOR = 14
-const CAROUSEL_HEIGHT =
-  ROW_HEIGHT + 2 * (DEPTH[2].y + (ROW_HEIGHT * DEPTH[2].scale) / 2 - ROW_HEIGHT / 2) + 2 * INDICATOR
+// % of the rows' band, from each end
+const EDGE_FADE = 20
+
+function bandHeight(depths: typeof DEPTH): number {
+  const last = depths[depths.length - 1]
+  return ROW_HEIGHT + 2 * (last.y + (ROW_HEIGHT * last.scale) / 2 - ROW_HEIGHT / 2)
+}
 // a mouse notch is ~100; trackpads send lots of small deltas
 const WHEEL_STEP = 60
 
@@ -171,9 +183,11 @@ function StoreCarousel({
   const count = rows.length
   const activeIndex = rows.findIndex((row) => row.key === value)
   const [front, setFront] = useState(Math.max(0, activeIndex))
-  const reach = DEPTH.length - 1
-  const moreAbove = front - reach > 0
-  const moreBelow = front + reach < count - 1
+  const depths = collapsed ? RAIL_DEPTH : DEPTH
+  const reach = depths.length - 1
+  // the rail says it scrolls whenever it can; expanded, only when stores are out of sight
+  const moreAbove = collapsed ? front > 0 : front - reach > 0
+  const moreBelow = collapsed ? front < count - 1 : front + reach < count - 1
   const box = useRef<HTMLDivElement>(null)
   const frontButton = useRef<HTMLButtonElement>(null)
   const wheel = useRef(0)
@@ -223,7 +237,7 @@ function StoreCarousel({
       role="group"
       aria-roledescription="carousel"
       className="relative px-2"
-      style={{ height: CAROUSEL_HEIGHT }}
+      style={{ height: bandHeight(depths) + 2 * INDICATOR }}
       onKeyDown={(event) => {
         if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return
         event.preventDefault()
@@ -233,52 +247,63 @@ function StoreCarousel({
     >
       {moreAbove && <MoreIndicator direction="up" onClick={() => turn(-1)} />}
       {moreBelow && <MoreIndicator direction="down" onClick={() => turn(1)} />}
-      {rows.map((row, index) => {
-        const offset = index - front
-        const distance = Math.abs(offset)
-        const depth = DEPTH[Math.min(distance, DEPTH.length - 1)]
-        const hidden = distance >= DEPTH.length
-        const isFront = distance === 0
-        const active = row.key === value
-        return (
-          <button
-            key={row.key}
-            ref={isFront ? frontButton : undefined}
-            onClick={() => {
-              setFront(index)
-              onChange(row.key)
-            }}
-            data-nav-view={row.key}
-            data-nav-skip={isFront ? undefined : ''}
-            tabIndex={isFront ? 0 : -1}
-            aria-current={active ? 'page' : undefined}
-            aria-hidden={hidden || undefined}
-            title={collapsed || !isFront ? `${row.label}${row.count != null ? ` (${row.count})` : ''}` : undefined}
-            aria-label={collapsed ? row.label : undefined}
-            className={`vitra-store-row group absolute inset-x-2 flex items-center gap-2.5 rounded-[9px] text-left text-[13px] transition-[transform,opacity,background-color,box-shadow] duration-300 ease-out motion-reduce:transition-none ${
-              collapsed ? 'justify-center px-0' : 'px-2.5'
-            } ${
-              isFront
-                ? 'bg-white/10 text-ink shadow-[0_4px_14px_-8px_var(--dialog-shadow),inset_0_1px_0_rgba(255,255,255,0.07)] backdrop-blur-md'
-                : 'bg-white/5 text-dim backdrop-blur-md hover:text-ink'
-            } ${hidden ? 'pointer-events-none opacity-0' : 'opacity-100'}`}
-            style={{
-              height: ROW_HEIGHT,
-              top: `calc(50% - ${ROW_HEIGHT / 2}px)`,
-              transform: `translateY(${Math.sign(offset) * depth.y}px) scale(${depth.scale})`,
-              zIndex: 10 - distance
-            }}
-          >
-            {active && <span className="vitra-sun absolute top-1/2 -left-[5px] h-[7px] w-[7px] -translate-y-1/2" />}
-            <span
-              className="flex min-w-0 flex-1 items-center gap-2.5 transition-opacity duration-300"
-              style={{ opacity: depth.fade, justifyContent: collapsed ? 'center' : undefined }}
+      <div
+        className="absolute inset-x-0"
+        style={{
+          top: INDICATOR,
+          height: bandHeight(depths),
+          maskImage: collapsed
+            ? `linear-gradient(to bottom, transparent, black ${EDGE_FADE}%, black ${100 - EDGE_FADE}%, transparent)`
+            : undefined
+        }}
+      >
+        {rows.map((row, index) => {
+          const offset = index - front
+          const distance = Math.abs(offset)
+          const depth = depths[Math.min(distance, depths.length - 1)]
+          const hidden = distance >= depths.length
+          const isFront = distance === 0
+          const active = row.key === value
+          return (
+            <button
+              key={row.key}
+              ref={isFront ? frontButton : undefined}
+              onClick={() => {
+                setFront(index)
+                onChange(row.key)
+              }}
+              data-nav-view={row.key}
+              data-nav-skip={isFront ? undefined : ''}
+              tabIndex={isFront ? 0 : -1}
+              aria-current={active ? 'page' : undefined}
+              aria-hidden={hidden || undefined}
+              title={collapsed || !isFront ? `${row.label}${row.count != null ? ` (${row.count})` : ''}` : undefined}
+              aria-label={collapsed ? row.label : undefined}
+              className={`vitra-store-row group absolute inset-x-2 flex items-center gap-2.5 rounded-[9px] text-left text-[13px] transition-[transform,opacity,background-color,box-shadow] duration-300 ease-out motion-reduce:transition-none ${
+                collapsed ? 'justify-center px-0' : 'px-2.5'
+              } ${
+                isFront
+                  ? 'bg-white/10 text-ink shadow-[0_4px_14px_-8px_var(--dialog-shadow),inset_0_1px_0_rgba(255,255,255,0.07)] backdrop-blur-md'
+                  : 'bg-white/5 text-dim backdrop-blur-md hover:text-ink'
+              } ${hidden ? 'pointer-events-none opacity-0' : 'opacity-100'}`}
+              style={{
+                height: ROW_HEIGHT,
+                top: `calc(50% - ${ROW_HEIGHT / 2}px)`,
+                transform: `translateY(${Math.sign(offset) * depth.y}px) scale(${depth.scale})`,
+                zIndex: 10 - distance
+              }}
             >
-              <RowContent row={row} active={active} collapsed={collapsed} />
-            </span>
-          </button>
-        )
-      })}
+              {active && <span className="vitra-sun absolute top-1/2 -left-[5px] h-[7px] w-[7px] -translate-y-1/2" />}
+              <span
+                className="flex min-w-0 flex-1 items-center gap-2.5 transition-opacity duration-300"
+                style={{ opacity: depth.fade, justifyContent: collapsed ? 'center' : undefined }}
+              >
+                <RowContent row={row} active={active} collapsed={collapsed} />
+              </span>
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }

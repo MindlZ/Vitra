@@ -109,6 +109,18 @@ export async function resolveProcessHints(game: Game): Promise<string[]> {
   return [...hints]
 }
 
+// earliest start of any of these exes, unix ms. null if none or it's denied (elevated games)
+export async function processStartTime(names: string[]): Promise<number | null> {
+  const list = names.map((name) => `'${basename(name, '.exe').replace(/'/g, "''")}'`).join(',')
+  const script =
+    `$p = Get-Process -Name ${list} -ErrorAction SilentlyContinue | Where-Object StartTime | ` +
+    `Sort-Object StartTime | Select-Object -First 1; ` +
+    `if ($p) { [DateTimeOffset]::new($p.StartTime).ToUnixTimeMilliseconds() }`
+  const stdout = await runCommand('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], 15_000)
+  const ms = Number(stdout.trim())
+  return Number.isFinite(ms) && ms > 0 ? ms : null
+}
+
 export async function listRunningProcesses(): Promise<Set<string>> {
   const stdout = await runCommand('tasklist', ['/fo', 'csv', '/nh'], 15_000)
   const names = new Set<string>()
@@ -129,6 +141,8 @@ export interface WatchOptions {
   graceMs?: number
   onConfirmed?: () => void
   signal?: { cancelled: boolean }
+  // already running when the watch began (adopted): count from here, not from first sight
+  startedAt?: number
 }
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
@@ -154,7 +168,7 @@ export async function watchSession(
   while (Date.now() - waitStarted < graceMs) {
     if (options.signal?.cancelled) return { seconds: 0, confirmed: false }
     if (await isRunning()) {
-      startedAt = Date.now()
+      startedAt = options.startedAt ?? Date.now()
       options.onConfirmed?.()
       break
     }

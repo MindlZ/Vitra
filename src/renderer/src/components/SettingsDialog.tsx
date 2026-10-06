@@ -1,15 +1,19 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import {
   Download,
   Eye,
   EyeOff,
   FolderSearch,
+  Gauge,
   Image as ImageIcon,
   Info,
   KeyRound,
   Library,
   Loader2,
+  Monitor,
   MonitorPlay,
+  Move,
+  Music as MusicIcon,
   Palette as PaletteIcon,
   RefreshCw,
   Scale,
@@ -21,18 +25,25 @@ import {
   X
 } from 'lucide-react'
 import CoffeeIcon from './CoffeeIcon'
-import type { ProgramsView, ScanResult, Settings } from '@shared/types'
+import type { ProgramsView, ScanResult, Settings, WidgetKind, WidgetSize } from '@shared/types'
 import developerAvatar from '../assets/mindlz.jpg'
 import { artUrl, forgetMissingArt } from '../lib/art'
-import { activeWallpaper, PRESETS } from '../lib/wallpapers'
+import { desktopShot, PRESETS } from '../lib/wallpapers'
+import { paletteFromHue } from '@shared/oklch'
 import { describeUpdate, useUpdate } from '../lib/update'
 import { RELEASES } from '../lib/changelog'
-import { perfReport } from '../lib/perf'
+import { exportPerfReport } from '../lib/perf'
 import { MIN_DIM } from './Backdrop'
 import Dropdown from './Dropdown'
 import { KOFI_URL } from './Sidebar'
 
 const LICENCE_URL = 'https://www.gnu.org/licenses/gpl-3.0.html'
+
+const WIDGET_SIZES = [
+  { value: 'small', label: 'Small' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'large', label: 'Large' }
+]
 
 const SCREEN_SAVER_OPTIONS = [
   { value: '0', label: 'Never' },
@@ -50,7 +61,7 @@ const PROGRAMS_OPTIONS: Array<{ value: ProgramsView; label: string }> = [
   { value: 'hidden', label: 'Hidden' }
 ]
 
-type SectionId = 'general' | 'library' | 'appearance' | 'connections' | 'about'
+type SectionId = 'general' | 'library' | 'appearance' | 'music' | 'performance' | 'connections' | 'about'
 
 const SECTIONS: Array<{ id: SectionId; label: string; icon: typeof Info; blurb: string }> = [
   {
@@ -70,6 +81,18 @@ const SECTIONS: Array<{ id: SectionId; label: string; icon: typeof Info; blurb: 
     label: 'Appearance',
     icon: PaletteIcon,
     blurb: 'Your wallpaper, how much of it shows, and the colours it lends the app.'
+  },
+  {
+    id: 'music',
+    label: 'Music',
+    icon: MusicIcon,
+    blurb: 'The visualiser, lyrics, and what floats over your games.'
+  },
+  {
+    id: 'performance',
+    label: 'Performance',
+    icon: Gauge,
+    blurb: 'Easing off in the background, and measuring how Vitra runs.'
   },
   {
     id: 'connections',
@@ -167,9 +190,14 @@ function WallpaperTile({
   children: ReactNode
 }) {
   return (
-    <button role="radio" aria-checked={selected} onClick={onClick} className="group flex flex-col gap-1.5 text-left">
+    <button
+      role="radio"
+      aria-checked={selected}
+      onClick={onClick}
+      className="group flex w-full min-w-0 flex-col gap-1.5 text-left"
+    >
       <span
-        className={`block aspect-[16/10] w-full overflow-hidden rounded-[9px] transition-shadow ${
+        className={`block aspect-[16/10] w-full overflow-hidden rounded-[9px] transition-shadow duration-200 ${
           selected
             ? 'ring-2 ring-accent ring-offset-2 ring-offset-panel'
             : 'ring-1 ring-white/10 group-hover:ring-white/25'
@@ -177,10 +205,118 @@ function WallpaperTile({
       >
         {children}
       </span>
-      <span className={`text-[11.5px] ${selected ? 'text-ink' : 'text-muted group-hover:text-dim'}`}>
+      <span className={`truncate text-[11.5px] ${selected ? 'text-ink' : 'text-muted group-hover:text-dim'}`}>
         {label}
       </span>
     </button>
+  )
+}
+
+function Segmented<T extends string>({
+  label,
+  value,
+  options,
+  onChange
+}: {
+  label: string
+  value: T
+  options: Array<{ value: T; label: string }>
+  onChange: (value: T) => void
+}) {
+  return (
+    <div role="radiogroup" aria-label={label} className="glass-soft inline-flex rounded-[10px] p-1">
+      {options.map((option) => {
+        const selected = value === option.value
+        return (
+          <button
+            key={option.value}
+            role="radio"
+            aria-checked={selected}
+            onClick={() => onChange(option.value)}
+            className={`h-7 rounded-[7px] px-3.5 text-[12px] transition-colors ${
+              selected ? 'bg-white/12 text-ink' : 'text-dim hover:text-ink'
+            }`}
+          >
+            {option.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function Slider({
+  label,
+  readout,
+  min,
+  max,
+  step,
+  value,
+  track,
+  onChange
+}: {
+  label: string
+  readout: string
+  min: number
+  max: number
+  step: number
+  value: number
+  // a css background for the track, else the default one
+  track?: string
+  onChange: (value: number) => void
+}) {
+  return (
+    <div className="hairline-b py-4 last:border-0">
+      <div className="mb-3 flex items-baseline justify-between">
+        <span className="text-[13px] text-ink">{label}</span>
+        <span className="text-[11.5px] tabular-nums text-dim">{readout}</span>
+      </div>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        aria-label={label}
+        onChange={(event) => onChange(Number(event.target.value))}
+        className="vitra-range w-full"
+        style={track ? ({ '--range-track': track } as CSSProperties) : undefined}
+      />
+    </div>
+  )
+}
+
+// pure red needs ~0.26
+const MAX_CHROMA = 0.26
+
+// drawn with the same gamut fallback as the palette, so the track shows what you get
+function hueTrack(chroma: number): string {
+  const stops = Array.from({ length: 19 }, (_, i) => paletteFromHue(i * 20, chroma).accent)
+  return `linear-gradient(to right, ${stops.join(', ')})`
+}
+
+function chromaTrack(hue: number): string {
+  const stops = Array.from({ length: 6 }, (_, i) => paletteFromHue(hue, (i / 5) * MAX_CHROMA).accent)
+  return `linear-gradient(to right, ${stops.join(', ')})`
+}
+
+function TileImage({ src }: { src: string }) {
+  return (
+    <img
+      src={src}
+      alt=""
+      decoding="async"
+      draggable={false}
+      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"
+    />
+  )
+}
+
+function TilePlaceholder({ icon }: { icon: ReactNode }) {
+  return (
+    <span className="flex h-full w-full items-center justify-center rounded-[9px] border border-dashed border-white/15 text-muted transition-colors group-hover:text-dim">
+      {icon}
+    </span>
   )
 }
 
@@ -354,7 +490,8 @@ export default function SettingsDialog({
     })
   }, [])
   const current = SECTIONS.find((entry) => entry.id === section) ?? SECTIONS[0]
-  const palette = activeWallpaper(settings).palette
+  const screens = settings.desktopScreens ?? []
+  const shot = desktopShot(settings)
 
   const open = (id: SectionId): void => {
     lastSection = id
@@ -376,11 +513,6 @@ export default function SettingsDialog({
           label="Scan libraries on start"
           checked={settings.scanOnStart}
           onChange={(scanOnStart) => onChange({ scanOnStart })}
-        />
-        <ToggleRow
-          label="Start in big picture"
-          checked={settings.bigPictureOnStart}
-          onChange={(bigPictureOnStart) => onChange({ bigPictureOnStart })}
         />
         <ToggleRow
           label="Start with Windows"
@@ -412,6 +544,11 @@ export default function SettingsDialog({
             Open now
           </button>
         </Row>
+        <ToggleRow
+          label="Start in big picture"
+          checked={settings.bigPictureOnStart}
+          onChange={(bigPictureOnStart) => onChange({ bigPictureOnStart })}
+        />
       </Card>
       <Card title="While you play">
         <ToggleRow
@@ -531,104 +668,150 @@ export default function SettingsDialog({
     <>
       <Card title="Wallpaper">
         <div className="hairline-b py-4 last:border-0">
-          <div role="radiogroup" aria-label="Wallpaper" className="grid grid-cols-5 gap-2">
-            {PRESETS.map((preset) => (
-              <WallpaperTile
-                key={preset.id}
-                label={preset.name}
-                selected={settings.wallpaper === preset.id}
-                onClick={() => onChange({ wallpaper: preset.id })}
-              >
-                <img src={preset.src} alt="" draggable={false} className="h-full w-full object-cover" />
-              </WallpaperTile>
-            ))}
-            {settings.backgroundImage ? (
-              <WallpaperTile
-                label="Your image"
-                selected={settings.wallpaper === 'custom'}
-                onClick={() => onChange({ wallpaper: 'custom' })}
-              >
-                <img
-                  src={artUrl(settings.backgroundImage)}
-                  alt=""
-                  draggable={false}
-                  className="h-full w-full object-cover"
-                />
-              </WallpaperTile>
-            ) : (
-              <WallpaperTile label="Your image" selected={false} onClick={onPickBackground}>
-                <span className="flex h-full w-full flex-col items-center justify-center gap-1.5 border border-dashed border-white/15 text-[11.5px] text-muted">
-                  <ImageIcon className="h-4 w-4" />
-                  Choose image
-                </span>
-              </WallpaperTile>
-            )}
-          </div>
-          {settings.backgroundImage && (
-            <div className="mt-3 flex justify-end gap-2">
-              <button onClick={onPickBackground} className={quietButton}>
-                <ImageIcon className="h-3.5 w-3.5" />
-                Choose image
-              </button>
-              <button
-                onClick={onClearBackground}
-                aria-label="Remove your image"
-                title="Remove your image"
-                className="glass-btn flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] text-muted hover:text-ink"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
+          <div role="radiogroup" aria-label="Wallpaper" className="grid grid-cols-[4fr_auto_2fr] gap-4">
+            <div role="group" aria-label="Vitra">
+              <div className="mb-2 text-[11.5px] text-muted">Vitra</div>
+              <div className="grid grid-cols-4 gap-2">
+                {PRESETS.map((preset) => (
+                  <WallpaperTile
+                    key={preset.id}
+                    label={preset.name}
+                    selected={settings.wallpaper === preset.id}
+                    onClick={() => onChange({ wallpaper: preset.id })}
+                  >
+                    <TileImage src={preset.src} />
+                  </WallpaperTile>
+                ))}
+              </div>
             </div>
-          )}
+            <span aria-hidden className="mt-7 mb-6 w-px bg-white/10" />
+            <div role="group" aria-label="Yours">
+              <div className="mb-2 text-[11.5px] text-muted">Yours</div>
+              <div className="grid grid-cols-2 gap-2">
+                <WallpaperTile
+                  label="Desktop"
+                  selected={settings.wallpaper === 'desktop'}
+                  onClick={() => onChange({ wallpaper: 'desktop' })}
+                >
+                  {shot ? (
+                    <TileImage src={artUrl(shot.image, 320)} />
+                  ) : (
+                    <TilePlaceholder icon={<Monitor className="h-4 w-4" />} />
+                  )}
+                </WallpaperTile>
+                {settings.backgroundImage ? (
+                  <WallpaperTile
+                    label="Your image"
+                    selected={settings.wallpaper === 'custom'}
+                    onClick={() => onChange({ wallpaper: 'custom' })}
+                  >
+                    <TileImage src={artUrl(settings.backgroundImage, 320)} />
+                  </WallpaperTile>
+                ) : (
+                  <WallpaperTile label="Your image" selected={false} onClick={onPickBackground}>
+                    <TilePlaceholder icon={<ImageIcon className="h-4 w-4" />} />
+                  </WallpaperTile>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
 
-        <Row label="Theme">
-          <div role="radiogroup" aria-label="Theme" className="glass-soft inline-flex rounded-[10px] p-1">
-            {(['auto', 'light', 'dark'] as const).map((theme) => {
-              const selected = settings.theme === theme
-              return (
-                <button
-                  key={theme}
-                  role="radio"
-                  aria-checked={selected}
-                  onClick={() => onChange({ theme })}
-                  className={`h-7 rounded-[7px] px-3.5 text-[12px] capitalize transition-colors ${
-                    selected ? 'bg-white/12 text-ink' : 'text-dim hover:text-ink'
-                  }`}
-                >
-                  {theme}
-                </button>
-              )
-            })}
-          </div>
-        </Row>
-
-        {palette && (
-          <ToggleRow
-            label="Match colours to the image"
-            checked={settings.matchBackgroundColours}
-            onChange={(matchBackgroundColours) => onChange({ matchBackgroundColours })}
-          />
+        {settings.wallpaper === 'desktop' && screens.length > 1 && (
+          <Row label="Screen">
+            <div role="radiogroup" aria-label="Screen" className="flex gap-2">
+              {screens.map((screen, index) => (
+                <div key={screen.image} className="w-[76px]">
+                  <WallpaperTile
+                    label={`Screen ${index + 1}`}
+                    selected={shot === screen}
+                    onClick={() => onChange({ desktopScreen: index })}
+                  >
+                    <TileImage src={artUrl(screen.image, 320)} />
+                  </WallpaperTile>
+                </div>
+              ))}
+            </div>
+          </Row>
         )}
 
-        <div className="hairline-b py-4 last:border-0">
-          <div className="mb-3 flex items-baseline justify-between">
-            <span className="text-[13px] text-ink">Dim</span>
-            <span className="text-[11.5px] tabular-nums text-dim">
-              {Math.max(MIN_DIM, settings.backgroundDim)}%
-            </span>
-          </div>
-          <input
-            type="range"
-            min={MIN_DIM}
-            max={100}
-            step={1}
-            value={Math.max(MIN_DIM, settings.backgroundDim)}
-            aria-label="Background dim"
-            onChange={(event) => onChange({ backgroundDim: Number(event.target.value) })}
-            className="vitra-range w-full"
+        {settings.wallpaper === 'custom' && settings.backgroundImage && (
+          <Row label="Your image">
+            <button onClick={onPickBackground} className={quietButton}>
+              <ImageIcon className="h-3.5 w-3.5" />
+              Change
+            </button>
+            <button
+              onClick={onClearBackground}
+              aria-label="Remove your image"
+              title="Remove"
+              className="glass-btn flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] text-muted hover:text-ink"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </Row>
+        )}
+
+        <Slider
+          label="Dim"
+          readout={`${Math.max(MIN_DIM, settings.backgroundDim)}%`}
+          min={MIN_DIM}
+          max={100}
+          step={1}
+          value={Math.max(MIN_DIM, settings.backgroundDim)}
+          onChange={(backgroundDim) => onChange({ backgroundDim })}
+        />
+      </Card>
+
+      <Card title="Colour">
+        <Row label="Theme">
+          <Segmented
+            label="Theme"
+            value={settings.theme}
+            options={[
+              { value: 'auto', label: 'Auto' },
+              { value: 'light', label: 'Light' },
+              { value: 'dark', label: 'Dark' }
+            ]}
+            onChange={(theme) => onChange({ theme })}
           />
-        </div>
+        </Row>
+        <Row label="Accent">
+          <Segmented
+            label="Accent"
+            value={settings.accentSource}
+            options={[
+              { value: 'wallpaper', label: 'Wallpaper' },
+              { value: 'vitra', label: 'Vitra' },
+              { value: 'custom', label: 'Custom' }
+            ]}
+            onChange={(accentSource) => onChange({ accentSource })}
+          />
+        </Row>
+        {settings.accentSource === 'custom' && (
+          <>
+            <Slider
+              label="Hue"
+              readout={paletteFromHue(settings.accentHue, settings.accentChroma).accent}
+              min={0}
+              max={359}
+              step={1}
+              value={settings.accentHue}
+              track={hueTrack(settings.accentChroma)}
+              onChange={(accentHue) => onChange({ accentHue })}
+            />
+            <Slider
+              label="Vividness"
+              readout={`${Math.round((settings.accentChroma / MAX_CHROMA) * 100)}%`}
+              min={0}
+              max={MAX_CHROMA}
+              step={0.005}
+              value={settings.accentChroma}
+              track={chromaTrack(settings.accentHue)}
+              onChange={(accentChroma) => onChange({ accentChroma })}
+            />
+          </>
+        )}
       </Card>
 
       <Card title="Effects">
@@ -641,21 +824,6 @@ export default function SettingsDialog({
           label="Particles"
           checked={settings.backgroundParticles}
           onChange={(backgroundParticles) => onChange({ backgroundParticles })}
-        />
-        <ToggleRow
-          label="Visualiser peaks"
-          checked={settings.visualiserPeaks}
-          onChange={(visualiserPeaks) => onChange({ visualiserPeaks })}
-        />
-        <ToggleRow
-          label="Visualiser glow"
-          checked={settings.visualiserGlow}
-          onChange={(visualiserGlow) => onChange({ visualiserGlow })}
-        />
-        <ToggleRow
-          label="Slow down in the background"
-          checked={settings.slowWhenUnfocused}
-          onChange={(slowWhenUnfocused) => onChange({ slowWhenUnfocused })}
         />
       </Card>
 
@@ -676,6 +844,124 @@ export default function SettingsDialog({
             Preview
           </button>
         </Row>
+      </Card>
+    </>
+  )
+
+  // the floating widgets share a shape: on/off, a size preset, and a Move button
+  const floating = (
+    kind: WidgetKind,
+    shown: boolean,
+    size: WidgetSize,
+    patch: (next: { shown?: boolean; size?: WidgetSize }) => Partial<Settings>
+  ): ReactNode => (
+    <>
+      <ToggleRow label="Show over games" checked={shown} onChange={(on) => onChange(patch({ shown: on }))} />
+      {shown && (
+        <>
+          <Row label="Size">
+            <Dropdown
+              label={`Floating ${kind} size`}
+              value={size}
+              onChange={(value) => onChange(patch({ size: value as WidgetSize }))}
+              options={WIDGET_SIZES}
+            />
+          </Row>
+          <Row label="Position">
+            <button onClick={() => void window.launcher.moveWidget?.(kind, true)} className={quietButton}>
+              <Move className="h-3.5 w-3.5" />
+              Move
+            </button>
+          </Row>
+        </>
+      )}
+    </>
+  )
+
+  const music = (
+    <>
+      <Card title="Visualiser">
+        <ToggleRow
+          label="Peaks"
+          checked={settings.visualiserPeaks}
+          onChange={(visualiserPeaks) => onChange({ visualiserPeaks })}
+        />
+        <ToggleRow
+          label="Glow"
+          checked={settings.visualiserGlow}
+          onChange={(visualiserGlow) => onChange({ visualiserGlow })}
+        />
+      </Card>
+
+      <Card title="Lyrics">
+        <ToggleRow
+          label="Show lyrics"
+          hint="lrclib.net"
+          checked={settings.lyrics}
+          onChange={(lyrics) => onChange({ lyrics })}
+        />
+        {settings.lyrics && (
+          <>
+            <ToggleRow
+              label="On Home"
+              checked={settings.lyricsHome}
+              onChange={(lyricsHome) => onChange({ lyricsHome })}
+            />
+            <ToggleRow
+              label="In big picture"
+              checked={settings.lyricsBigPicture}
+              onChange={(lyricsBigPicture) => onChange({ lyricsBigPicture })}
+            />
+            <ToggleRow
+              label="On the screen saver"
+              checked={settings.lyricsSaver}
+              onChange={(lyricsSaver) => onChange({ lyricsSaver })}
+            />
+          </>
+        )}
+      </Card>
+
+      <Card title="Floating visualiser">
+        {floating('visualiser', settings.visualiserWidget, settings.visualiserWidgetSize, ({ shown, size }) =>
+          shown !== undefined ? { visualiserWidget: shown } : { visualiserWidgetSize: size }
+        )}
+      </Card>
+
+      {settings.lyrics && (
+        <Card title="Floating lyrics">
+          {floating('lyrics', settings.lyricsWidget, settings.lyricsWidgetSize, ({ shown, size }) =>
+            shown !== undefined ? { lyricsWidget: shown } : { lyricsWidgetSize: size }
+          )}
+        </Card>
+      )}
+    </>
+  )
+
+  const performanceCards = (
+    <>
+      <Card title="In the background">
+        <ToggleRow
+          label="Slow down animations"
+          checked={settings.slowWhenUnfocused}
+          onChange={(slowWhenUnfocused) => onChange({ slowWhenUnfocused })}
+        />
+      </Card>
+
+      <Card title="Measuring">
+        <ToggleRow
+          label="Performance overlay"
+          checked={settings.perfOverlay}
+          onChange={(perfOverlay) => onChange({ perfOverlay })}
+        />
+        {settings.perfOverlay && (
+          <BackupRow
+            label="Performance report"
+            action="Export"
+            icon={<Download className="h-3.5 w-3.5" />}
+            done="Saved"
+            run={exportPerfReport}
+          />
+        )}
       </Card>
     </>
   )
@@ -791,32 +1077,11 @@ export default function SettingsDialog({
         </Row>
       </Card>
 
-      <Card title="Developer">
-        <ToggleRow
-          label="Performance overlay"
-          checked={settings.perfOverlay}
-          onChange={(perfOverlay) => onChange({ perfOverlay })}
-        />
-        {settings.perfOverlay && (
-          <BackupRow
-            label="Performance report"
-            action="Export"
-            icon={<Download className="h-3.5 w-3.5" />}
-            done="Saved"
-            run={() => {
-              const report = perfReport()
-              if (!report) return Promise.resolve({ ok: false, error: 'Nothing recorded yet' })
-              return window.launcher.exportPerfReport?.(report)
-            }}
-          />
-        )}
-      </Card>
-
       <Card title="What it is">
         <p className="py-4 text-[12px] leading-relaxed text-muted">
           One library for your Steam, Epic, GOG, Xbox and local games, built from the files already
           on your PC. No accounts: the only things fetched online are cover art, game names, new
-          versions from GitHub and, if you add a key, your friends list. It's free and always will be. If it's earned a place on
+          versions from GitHub, lyrics if you turn them on and, if you add a key, your friends list. It's free and always will be. If it's earned a place on
           your PC, a tip is welcome but never expected.
         </p>
       </Card>
@@ -838,6 +1103,8 @@ export default function SettingsDialog({
     general,
     library,
     appearance,
+    music,
+    performance: performanceCards,
     connections,
     about
   }

@@ -1,6 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { artColours, quietFrom, type ArtColours } from '../lib/artColour'
 import { useMedia } from '../lib/media'
+import { triple } from '../lib/theme'
 import { Clock } from './Home'
+import Lyrics from './Lyrics'
 import Visualiser from './Visualiser'
 
 interface Props {
@@ -41,8 +44,47 @@ export default function ScreenSaver({ leaving }: Props) {
   const track = media?.active && media.title ? media : null
   const art = track?.art
 
+  const root = useRef<HTMLDivElement>(null)
+  const [colours, setColours] = useState<ArtColours | null>(null)
+  useEffect(() => {
+    // no art: the saver's own backdrop, read inside its dark subtree
+    const backdrop = (): ArtColours | null => {
+      const base = root.current && getComputedStyle(root.current).getPropertyValue('--color-base').trim()
+      return base?.startsWith('#') ? quietFrom(triple(base)) : null
+    }
+    if (!art) {
+      setColours(backdrop())
+      return
+    }
+    let alive = true
+    artColours(art)
+      .then((next) => alive && setColours(next ?? backdrop()))
+      .catch(() => alive && setColours(backdrop()))
+    return () => {
+      alive = false
+    }
+  }, [art])
+
+  // the canvas reads its colours on this event, after the new vars are on it
+  useEffect(() => {
+    window.dispatchEvent(new Event('vitra:palette'))
+  }, [colours])
+
+  // lightest and solid at the top, darker and fainter towards the horizon
+  const visualiserColours = colours
+    ? ({
+        '--accent-rgb': colours.accent,
+        '--accent-tint-rgb': colours.tint,
+        '--vis-peak': `rgb(${colours.peak})`,
+        '--vis-mid': `rgb(${colours.tint} / 0.85)`,
+        '--vis-bottom': `rgb(${colours.accent} / 0.55)`,
+        '--vis-line': colours.line
+      } as CSSProperties)
+    : undefined
+
   return (
     <div
+      ref={root}
       aria-hidden
       data-state={leaving ? 'leaving' : shown ? 'shown' : 'entering'}
       data-appearance="dark"
@@ -70,7 +112,7 @@ export default function ScreenSaver({ leaving }: Props) {
                 <img src={art} alt="" draggable={false} className="vitra-saver__reflection" />
               </div>
             )}
-            <div className="max-w-[40vw] min-w-0">
+            <div className="relative max-w-[40vw] min-w-0">
               <div className="line-clamp-2 font-display text-[clamp(26px,2.8vw,48px)] leading-[1.02] font-bold text-ink [font-stretch:85%]">
                 {track.title}
               </div>
@@ -82,12 +124,14 @@ export default function ScreenSaver({ leaving }: Props) {
               {track.status && track.status !== 'Playing' && (
                 <div className="mt-3 text-[clamp(12px,0.9vw,15px)] text-muted">{track.status}</div>
               )}
+              {/* out of flow: its width changes every line, which re-centred the row and moved the art */}
+              <Lyrics place="saver" className="absolute top-full left-0 mt-[3vh] w-[40vw]" />
             </div>
           </div>
         )}
       </div>
 
-      <Visualiser className="vitra-saver__visualiser" />
+      <Visualiser className="vitra-saver__visualiser" style={visualiserColours} glow={false} />
     </div>
   )
 }

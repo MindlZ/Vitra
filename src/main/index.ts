@@ -4,6 +4,7 @@ import {
   desktopCapturer,
   dialog,
   ipcMain,
+  nativeImage,
   protocol,
   session,
   shell
@@ -12,7 +13,7 @@ import { existsSync, promises as fs } from 'fs'
 import { extname, join, normalize } from 'path'
 import { artDir, getGame, getGames, getSettings, load, patchGame, publicSettings, removeGame, setSettings } from './store'
 import { addManualGame, classifySoftware, scanLibrary } from './library'
-import { cancelAllTracking, launchGame, onRunningChange, runningStates, stopTracking } from './launch'
+import { adoptRunningGames, cancelAllTracking, launchGame, onRunningChange, runningStates, stopTracking } from './launch'
 import { discordConfigured, stopPresence, updatePresence } from './discord'
 import { clearArt, ensureArt, retryMissingArt, setLocalArt, type ArtKind } from './art'
 import { getFriends, invalidateFriends, joinFriend } from './friends'
@@ -20,10 +21,13 @@ import { getSessions } from './sessions'
 import { exportBackup, importBackup } from './backup'
 import { clearAchievements, getAchievements } from './achievements'
 import { getMedia, onMediaChange, sendMediaCommand, stopMedia } from './media'
-import { backfillLightness, clearBackground, setBackground } from './background'
+import { backfillLightness, clearBackground, setBackground, syncDesktopWallpaper } from './background'
+import { initialBounds, trackWindowState, wasMaximized } from './windowState'
 import { capturePath, listCaptures, serveCapture } from './captures'
 import { runPower } from './power'
-import { exportPerfReport } from './perf'
+import { exportPerfReport, latestMetrics, setPerfRecording } from './perf'
+import { applyWidgets, closeWidgets, sendToWidgets, setWidgetMoving, updateWidgetLook } from './widget'
+import { getLyrics } from './lyrics'
 import { checkForUpdates, getUpdateState, installUpdate, scheduleUpdateChecks } from './updater'
 import { applyLoginItem, createTray, destroyTray, showWindow, startedInBackground } from './tray'
 import { clearSteamPathCache } from './paths'
@@ -58,6 +62,25 @@ const MIME: Record<string, string> = {
   '.bmp': 'image/bmp'
 }
 
+// ?w= : a downscaled jpeg, so a tile or the backdrop bake doesn't decode a 4k
+// original. memo'd per file+width+mtime; the wallpaper is the only real user
+const resized = new Map<string, Uint8Array<ArrayBuffer>>()
+async function serveResized(path: string, wanted: number): Promise<Response> {
+  const width = Math.min(2048, Math.max(64, Math.round(wanted)))
+  const { mtimeMs } = await fs.stat(path)
+  const key = `${path}|${width}|${mtimeMs}`
+  let data = resized.get(key)
+  if (!data) {
+    const image = nativeImage.createFromBuffer(await fs.readFile(path))
+    if (image.isEmpty()) return new Response('Not found', { status: 404 })
+    const small = image.getSize().width > width ? image.resize({ width, quality: 'good' }) : image
+    data = new Uint8Array(small.toJPEG(88))
+    if (resized.size > 16) resized.clear()
+    resized.set(key, data)
+  }
+  return new Response(data, { headers: { 'content-type': 'image/jpeg', 'cache-control': 'no-cache' } })
+}
+
 function registerArtProtocol(): void {
   protocol.handle(ART_SCHEME, async (request) => {
     try {
@@ -69,6 +92,9 @@ function registerArtProtocol(): void {
       const root = artDir()
       const resolved = normalize(join(root, filename))
       if (!resolved.startsWith(normalize(root))) return new Response('Forbidden', { status: 403 })
+
+      const width = Number(url.searchParams.get('w'))
+      if (width) return await serveResized(resolved, width)
 
       const data = await fs.readFile(resolved)
       return new Response(new Uint8Array(data), {
@@ -122,8 +148,7 @@ function classifyInBackground(): void {
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
-    width: 1360,
-    height: 860,
+    ...initialBounds(),
     minWidth: 980,
     minHeight: 640,
     show: false,
@@ -145,14 +170,35 @@ function createWindow(): void {
   const sendMaximized = (): void => {
     mainWindow?.webContents.send('window:maximized', mainWindow.isMaximized())
   }
+  // the desktop wallpaper may have changed while Vitra was in the background
+  const followDesktop = (): void => {
+    if (getSettings().wallpaper !== 'desktop') return
+    void syncDesktopWallpaper().then((changed) => {
+      if (changed) mainWindow?.webContents.send('library:changed', null)
+    })
+  }
+  mainWindow.on('focus', followDesktop)
+  mainWindow.on('show', followDesktop)
   mainWindow.on('maximize', sendMaximized)
   mainWindow.on('unmaximize', sendMaximized)
+  trackWindowState(mainWindow)
+  // maximize() also shows, so not before the window's meant to be seen (tray start)
+  const restoreMaximized = (): void => {
+    if (wasMaximized() && !mainWindow?.isFullScreen()) mainWindow?.maximize()
+  }
+  mainWindow.once('show', restoreMaximized)
 
   // login entry always passes --background; whether to stay hidden is decided here
   mainWindow.on('ready-to-show', () => {
     const { startInTray, bigPictureOnStart } = getSettings()
-    if (!startedInBackground() || !startInTray || bigPictureOnStart) mainWindow?.show()
+    if (!startedInBackground() || !startInTray || bigPictureOnStart) {
+      // maximised straight away rather than shown, then maximised (no flash)
+      if (wasMaximized() && !mainWindow?.isFullScreen()) mainWindow?.maximize()
+      else mainWindow?.show()
+    }
   })
+
+  mainWindow.on('closed', closeWidgets)
 
   mainWindow.on('close', (event) => {
     if (quitting || !getSettings().closeToTray) return
@@ -182,6 +228,10 @@ function applySettings(patch: Partial<Settings>): Settings {
   if ('steamWebApiKey' in patch) clearAchievements()
   if ('discordPresence' in patch) updatePresence()
   if ('checkForUpdates' in patch) scheduleUpdateChecks()
+  if ('perfOverlay' in patch) setPerfRecording(Boolean(patch.perfOverlay), () => mainWindow)
+  const widgetKeys = ['visualiserWidget', 'visualiserWidgetSize', 'lyrics', 'lyricsWidget', 'lyricsWidgetSize']
+  if (widgetKeys.some((key) => key in patch)) applyWidgets()
+  if ('visualiserPeaks' in patch || 'visualiserGlow' in patch) updateWidgetLook()
   if ('steamGridDbKey' in patch) retryMissingArt()
   if ('steamPath' in patch) {
     clearSteamPathCache()
@@ -225,7 +275,10 @@ function registerIpc(): void {
 
   ipcMain.handle('media:get', () => getMedia())
   ipcMain.handle('media:command', (_event, command: MediaCommand) => sendMediaCommand(command))
-  onMediaChange((state) => mainWindow?.webContents.send('media:changed', state))
+  onMediaChange((state) => {
+    mainWindow?.webContents.send('media:changed', state)
+    sendToWidgets('media:changed', state)
+  })
   onRunningChange(updatePresence)
 
   ipcMain.handle('game:launch', (_event, id: string) => launchGame(id))
@@ -316,12 +369,19 @@ function registerIpc(): void {
     return setLocalArt(id, kind, result.filePaths[0])
   })
 
-  ipcMain.handle('settings:set', (_event, patch: Partial<Settings>) => {
+  ipcMain.handle('settings:set', async (_event, patch: Partial<Settings>) => {
     // only the picker sets these, or the renderer could aim applib:// at any file name
     const rest = { ...patch }
     delete rest.backgroundImage
     delete rest.backgroundPalette
     delete rest.backgroundLightness
+    delete rest.desktopScreens
+    delete rest.desktopStamp
+    delete rest.visualiserWidgetPos
+    delete rest.lyricsWidgetPos
+    delete rest.windowState
+    // copied first, so the reply already carries the image
+    if (rest.wallpaper === 'desktop') await syncDesktopWallpaper()
     return applySettings(rest)
   })
 
@@ -384,15 +444,10 @@ function registerIpc(): void {
     discordConfigured: discordConfigured()
   }))
 
-  ipcMain.handle('app:metrics', (): ProcessMetric[] =>
-    app.getAppMetrics().map((metric) => ({
-      type: metric.type,
-      cpu: Math.round(metric.cpu.percentCPUUsage * 10) / 10,
-      // privateBytes is windows-only, hence the fallback
-      memoryMb: Math.round((metric.memory.privateBytes ?? metric.memory.workingSetSize) / 102.4) / 10
-    }))
-  )
-  ipcMain.handle('perf:export', (_event, recording: unknown) => exportPerfReport(mainWindow, recording))
+  ipcMain.handle('app:metrics', (): ProcessMetric[] => latestMetrics())
+  ipcMain.handle('perf:export', (_event, frames: unknown) => exportPerfReport(mainWindow, frames))
+  ipcMain.handle('widget:move', (_event, kind: unknown, on: unknown) => setWidgetMoving(kind, Boolean(on)))
+  ipcMain.handle('lyrics:get', (_event, track: unknown) => getLyrics(track))
 
   ipcMain.handle('settings:pick-steam-path', async () => {
     const result = await dialog.showOpenDialog({
@@ -419,6 +474,7 @@ if (!app.requestSingleInstanceLock()) {
     registerArtProtocol()
     await load()
     backfillLightness()
+    if (getSettings().wallpaper === 'desktop') await syncDesktopWallpaper()
     registerIpc()
     registerAudioCapture()
     createWindow()
@@ -428,6 +484,9 @@ if (!app.requestSingleInstanceLock()) {
     )
     applyLoginItem(getSettings().openAtLogin)
     scheduleUpdateChecks()
+    setPerfRecording(getSettings().perfOverlay, () => mainWindow)
+    void adoptRunningGames().catch((err) => console.error('[adopt]', err))
+    applyWidgets()
 
     if (getSettings().scanOnStart) {
       void scanLibrary()

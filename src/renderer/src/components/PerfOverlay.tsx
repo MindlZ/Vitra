@@ -1,10 +1,10 @@
-import { roleOf, score, totals, usePerfSample } from '../lib/perf'
+import { roleOf, score, totals, useOverlaySample } from '../lib/perf'
 
 const ROLES = ['main', 'renderer', 'gpu', 'other']
 const LABELS: Record<string, string> = { main: 'Main', renderer: 'Renderer', gpu: 'GPU', other: 'Other' }
 
 export default function PerfOverlay() {
-  const sample = usePerfSample()
+  const sample = useOverlaySample()
   if (!sample) return null
 
   const byRole = new Map<string, { cpu: number; memoryMb: number }>()

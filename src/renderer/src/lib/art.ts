@@ -31,8 +31,9 @@ function notify(key: string): void {
   listeners.get(key)?.forEach((fn) => fn())
 }
 
-export function artUrl(file: string): string {
-  return `applib://art/${encodeURIComponent(file)}`
+// width = main serves a downscaled jpeg
+export function artUrl(file: string, width?: number): string {
+  return `applib://art/${encodeURIComponent(file)}${width ? `?w=${width}` : ''}`
 }
 
 // pairs with main's retryMissingArt; without it new covers needed a restart

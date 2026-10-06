@@ -48,6 +48,7 @@ import CoverReflection from './CoverReflection'
 import { Clock, Friends, lastPlayedPhrase, useMinute } from './Home'
 import NowPlaying from './NowPlaying'
 import StoreLogo, { type StoreLogoKind } from './StoreLogo'
+import Lyrics from './Lyrics'
 import Visualiser from './Visualiser'
 
 // A plays, X details, Y favourite, LB/RB tabs, B back (never exits), View exits
@@ -249,7 +250,7 @@ function StoreRow({
         {entries.map((store) => {
           const current = store === active
           const label = store === 'all' ? 'All' : store === 'manual' ? 'Local' : sourceLabel(store)
-          const logo = store === 'all' || store === 'manual' ? undefined : (store as StoreLogoKind)
+          const logo = store === 'all' ? undefined : (store as StoreLogoKind)
           return (
             <button
               key={store}
@@ -1034,6 +1035,7 @@ export default function BigPicture({
                 <NowPlaying />
               </div>
             </div>
+            <Lyrics place="tv" className="mt-2 w-full max-w-[900px] shrink-0" />
           </div>
 
           <div className="flex items-end justify-between gap-8 px-12 pb-2">

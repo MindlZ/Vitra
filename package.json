@@ -1,7 +1,7 @@
 {
   "name": "vitra",
   "productName": "Vitra",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "A custom game launcher for Steam, Epic, GOG, Xbox and local games",
   "main": "./out/main/index.js",
   "author": "MindlZ",

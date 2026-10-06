@@ -3,6 +3,7 @@ import type {
   Capture,
   FriendsSnapshot,
   Game,
+  LyricLine,
   MediaCommand,
   MediaState,
   PlaySession,
@@ -12,10 +13,17 @@ import type {
   ScanResult,
   Settings,
   UpdateState,
+  WidgetKind,
   WindowAction
 } from './types'
 
 export type ArtKind = 'cover' | 'hero' | 'logo'
+
+export interface WidgetState {
+  peaks: boolean
+  glow: boolean
+  moving: boolean
+}
 
 export interface LibrarySnapshot {
   games: Game[]
@@ -75,8 +83,13 @@ export interface LauncherApi {
   onMaximizedChanged(callback: (maximized: boolean) => void): () => void
   getAppInfo(): Promise<{ packaged: boolean; version: string; discordConfigured?: boolean }>
   getMetrics(): Promise<ProcessMetric[]>
-  // main adds system info, then a save dialog
-  exportPerfReport(recording: object): Promise<{ ok: boolean; error?: string }>
+  // main merges its own process samples and system info, then a save dialog
+  exportPerfReport(frames: object[]): Promise<{ ok: boolean; error?: string }>
+  // synced lyrics for a track; null when off, not found or offline
+  getLyrics(track: { title: string; artist: string; album?: string; durationMs?: number }): Promise<LyricLine[] | null>
+  // floating widgets: move mode on/off, and the state main pushes to a widget window
+  moveWidget(kind: WidgetKind, on: boolean): Promise<void>
+  onWidgetState(callback: (state: WidgetState) => void): () => void
   onOpenBigPicture(callback: () => void): () => void
 
   onLibraryChanged(callback: () => void): () => void

@@ -1,9 +1,13 @@
-import { useEffect, useRef, type RefObject } from 'react'
+import { useEffect, useRef, type CSSProperties, type RefObject } from 'react'
 import { pace } from '../lib/pace'
 import { readPalette } from '../lib/theme'
 
 interface Props {
   className?: string
+  // colour overrides (--accent-rgb, --vis-*); readPalette reads them off the canvas
+  style?: CSSProperties
+  // overrides the glow setting for this one
+  glow?: boolean
 }
 
 const HORIZON = 0.68
@@ -174,8 +178,11 @@ function useSystemAudio(): RefObject<AnalyserNode | null> {
   return analyser
 }
 
-export default function Visualiser({ className = '' }: Props) {
+export default function Visualiser({ className = '', style, glow: glowOverride }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  // a ref: the draw loop is set up once and reads this every frame
+  const glowRef = useRef(glowOverride)
+  glowRef.current = glowOverride
   const analyser = useSystemAudio()
 
   useEffect(() => {
@@ -221,7 +228,7 @@ export default function Visualiser({ className = '' }: Props) {
       sky = ctx.createLinearGradient(0, horizon - maxBar, 0, horizon)
       sky.addColorStop(0, colours.peak)
       sky.addColorStop(0.55, colours.mid)
-      sky.addColorStop(1, `rgb(${colours.accent})`)
+      sky.addColorStop(1, colours.bottom)
       // the edge fade, as one destination-in pass instead of an alpha per bar
       fade = ctx.createLinearGradient(0, 0, width, 0)
       fade.addColorStop(0, 'rgba(0, 0, 0, 0.3)')
@@ -301,7 +308,8 @@ export default function Visualiser({ className = '' }: Props) {
         }
       }
 
-      const { peaks: withPeaks, glow } = look
+      const withPeaks = look.peaks
+      const glow = glowRef.current ?? look.glow
       const dot = BAR / 2
       const horizon = Math.round(height * HORIZON)
       // headroom for a dot on a full bar
@@ -381,5 +389,5 @@ export default function Visualiser({ className = '' }: Props) {
     }
   }, [analyser])
 
-  return <canvas ref={canvasRef} aria-hidden className={`block w-full ${className}`} />
+  return <canvas ref={canvasRef} aria-hidden className={`block w-full ${className}`} style={style} />
 }

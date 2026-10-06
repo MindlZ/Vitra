@@ -6,6 +6,17 @@ export interface Release {
 // newest first. shown once after an update to a version listed here
 export const RELEASES: Release[] = [
   {
+    version: '0.3.0',
+    items: [
+      'Synced lyrics, on Home, big picture and the screen saver',
+      'Floating visualiser and lyrics, over your games',
+      'Your desktop wallpaper as the background, Wallpaper Engine too',
+      'Pick your own accent colour',
+      'Opens on the screen you left it on',
+      'The installer knows when it\'s an update'
+    ]
+  },
+  {
     version: '0.2.1',
     items: [
       'Lighter on your PC, and quieter in the background',

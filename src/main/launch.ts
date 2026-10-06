@@ -1,10 +1,12 @@
 import { BrowserWindow, shell } from 'electron'
 import { spawn } from 'child_process'
-import { dirname } from 'path'
-import { getGame, getSettings, patchGame, save } from './store'
-import { resolveProcessHints, watchSession } from './watcher'
+import { basename, dirname } from 'path'
+import { getGame, getGames, getSettings, patchGame, save } from './store'
+import { listRunningProcesses, processStartTime, resolveProcessHints, watchSession } from './watcher'
 import { recordSession } from './sessions'
-import { endCompanions, startCompanions } from './companions'
+import { readRegistryValue } from './paths'
+import { isWidgetWindow } from './widget'
+import { endCompanions, startCompanions, type StartedCompanions } from './companions'
 import type { Game, RunningState } from '../shared/types'
 
 interface ActiveSession {
@@ -119,16 +121,25 @@ export async function launchGame(
 
   const settings = getSettings()
   if (settings.minimiseOnLaunch && game.installed) {
-    for (const win of BrowserWindow.getAllWindows()) if (!win.isDestroyed()) win.minimize()
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed() && !isWidgetWindow(win)) win.minimize()
+    }
   }
   // uninstalled = an install prompt, no process coming
   if (!game.installed) return { ok: true }
   const companions = await startCompanions(game)
   if (!settings.trackPlaytime) return { ok: true }
 
+  track(game, companions)
+  return { ok: true }
+}
+
+// adopted = already running when Vitra opened: known exe names and its start time
+function track(game: Game, companions: StartedCompanions, adopted?: { hints: string[]; since: number }): void {
+  const gameId = game.id
   const session: ActiveSession = {
     gameId,
-    startedAt: Date.now(),
+    startedAt: adopted?.since ?? Date.now(),
     confirmed: false,
     signal: { cancelled: false }
   }
@@ -137,14 +148,17 @@ export async function launchGame(
 
   session.done = (async () => {
     try {
-      const hints = await resolveProcessHints(game)
-      if (hints.length && !game.processHints?.length) patchGame(gameId, { processHints: hints })
+      const hints = adopted?.hints ?? (await resolveProcessHints(game))
+      if (!adopted && hints.length && !game.processHints?.length) patchGame(gameId, { processHints: hints })
 
       const outcome = await watchSession(hints, {
         signal: session.signal,
+        startedAt: adopted?.since,
+        // it was running a moment ago; no 3 min wait for a launch
+        graceMs: adopted ? 10_000 : undefined,
         onConfirmed: () => {
           session.confirmed = true
-          session.startedAt = Date.now()
+          session.startedAt = adopted?.since ?? Date.now()
           emitRunning()
         }
       })
@@ -171,8 +185,72 @@ export async function launchGame(
       broadcast('library:changed', null)
     }
   })()
+}
 
-  return { ok: true }
+// shared by too many games to say which one is running
+const GENERIC_EXES = new Set([
+  'launcher.exe',
+  'game.exe',
+  'start.exe',
+  'play.exe',
+  'client.exe',
+  'main.exe',
+  'app.exe',
+  'bootstrapper.exe'
+])
+// a game left running for days isn't days of play
+const ADOPT_MAX_BACK_MS = 12 * 60 * 60 * 1000
+
+// Vitra opened mid-game: resume tracking games already running. matches only names
+// learned from a past launch (processHints) or a manual exe, and only names exactly
+// one game claims. counts from the process start, but not before the last recorded
+// play, so a session already saved on quit isn't counted twice
+export async function adoptRunningGames(): Promise<void> {
+  if (!getSettings().trackPlaytime) return
+  const claims = new Map<string, Game[]>()
+  const namesOf = new Map<string, string[]>()
+  for (const game of getGames()) {
+    if (!game.installed) continue
+    const names = new Set(
+      [...(game.processHints ?? []), ...(game.exePath ? [basename(game.exePath)] : [])].map((name) =>
+        name.toLowerCase()
+      )
+    )
+    namesOf.set(game.id, [...names])
+    for (const name of names) {
+      if (GENERIC_EXES.has(name)) continue
+      claims.set(name, [...(claims.get(name) ?? []), game])
+    }
+  }
+  if (!claims.size) return
+
+  const running = await listRunningProcesses()
+  const found = new Map<string, Game>()
+  for (const [name, games] of claims) {
+    if (games.length === 1 && running.has(name)) found.set(games[0].id, games[0])
+  }
+
+  // steam games only learn exe names from a launch; steam itself says what's running
+  const steamId = parseInt((await readRegistryValue('HKCU\\Software\\Valve\\Steam', 'RunningAppID')) ?? '', 16)
+  const steamGame = steamId > 0 ? getGame(`steam:${steamId}`) : undefined
+  if (steamGame?.installed && !found.has(steamGame.id)) {
+    const hints = (await resolveProcessHints(steamGame)).map((name) => name.toLowerCase())
+    if (hints.some((name) => running.has(name))) {
+      if (!steamGame.processHints?.length) patchGame(steamGame.id, { processHints: hints })
+      namesOf.set(steamGame.id, hints)
+      found.set(steamGame.id, steamGame)
+    }
+  }
+
+  for (const game of found.values()) {
+    if (active.has(game.id)) continue
+    const hints = namesOf.get(game.id) ?? []
+    const now = Date.now()
+    const started = (await processStartTime(hints.filter((name) => running.has(name)))) ?? now
+    const since = Math.min(now, Math.max(started, game.lastPlayed ?? 0, now - ADOPT_MAX_BACK_MS))
+    console.log(`[launch] adopted ${game.name}, running since ${new Date(since).toISOString()}`)
+    track(game, { pids: [] }, { hints, since })
+  }
 }
 
 export function stopTracking(gameId: string): void {
