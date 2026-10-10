@@ -95,7 +95,7 @@ A clock, a visualiser driven by whatever your PC is playing, the last game you
 played, and friends online. Left alone, it becomes a screen saver.
 
 <p align="center">
-  <img src="docs/images/home-moon.jpg" alt="The home screen" width="900" />
+  <img src="docs/images/home.jpg" alt="The home screen" width="900" />
 </p>
 
 ### Big picture mode
@@ -109,11 +109,12 @@ shut down the PC from the couch.
 
 ### Wallpapers and themes
 
-Four built-in wallpapers, or any image of your own. The interface takes its
-colours from the wallpaper and switches between light and dark to match.
+Four built-in dark wallpapers, your Windows wallpaper, or any image of your
+own. The interface takes its accent colour from the wallpaper, or one you
+pick. A light mode is there if you prefer it.
 
 <p align="center">
-  <img src="docs/images/home-smoke.jpg" alt="The light theme" width="900" />
+  <img src="docs/images/themes.gif" alt="The four built-in wallpapers" width="900" />
 </p>
 
 ### Stats
