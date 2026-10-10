@@ -22,7 +22,13 @@ import { getSessions } from './sessions'
 import { exportBackup, importBackup } from './backup'
 import { clearAchievements, getAchievements } from './achievements'
 import { getMedia, onMediaChange, sendMediaCommand, stopMedia } from './media'
-import { backfillLightness, clearBackground, setBackground, syncDesktopWallpaper } from './background'
+import {
+  backfillLightness,
+  clearBackground,
+  setBackground,
+  syncDesktopWallpaper,
+  watchDesktopWallpaper
+} from './background'
 import { initialBounds, trackWindowState, wasMaximized } from './windowState'
 import { capturePath, listCaptures, serveCapture } from './captures'
 import { runPower } from './power'
@@ -149,6 +155,13 @@ function classifyInBackground(): void {
     })
 }
 
+function followDesktop(): void {
+  if (getSettings().wallpaper !== 'desktop') return
+  void syncDesktopWallpaper().then((changed) => {
+    if (changed) mainWindow?.webContents.send('library:changed', null)
+  })
+}
+
 function createWindow(): void {
   mainWindow = new BrowserWindow({
     ...initialBounds(),
@@ -174,12 +187,6 @@ function createWindow(): void {
     mainWindow?.webContents.send('window:maximized', mainWindow.isMaximized())
   }
   // the desktop wallpaper may have changed while Vitra was in the background
-  const followDesktop = (): void => {
-    if (getSettings().wallpaper !== 'desktop') return
-    void syncDesktopWallpaper().then((changed) => {
-      if (changed) mainWindow?.webContents.send('library:changed', null)
-    })
-  }
   mainWindow.on('focus', followDesktop)
   mainWindow.on('show', followDesktop)
   mainWindow.on('maximize', sendMaximized)
@@ -519,6 +526,7 @@ if (!app.requestSingleInstanceLock()) {
     registerIpc()
     registerAudioCapture()
     createWindow()
+    void watchDesktopWallpaper(followDesktop)
     createTray(
       () => mainWindow,
       () => mainWindow?.webContents.send('app:open-big-picture', null)

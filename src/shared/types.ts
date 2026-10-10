@@ -168,7 +168,7 @@ export type WidgetKind = 'visualiser' | 'lyrics'
 export type Theme = 'auto' | 'light' | 'dark'
 export type Appearance = 'light' | 'dark'
 
-export type WallpaperPreset = 'crimson' | 'smoke' | 'tree' | 'moon'
+export type WallpaperPreset = 'vigil' | 'hex' | 'gate' | 'aurora'
 export type Wallpaper = WallpaperPreset | 'custom' | 'desktop'
 
 export type AccentSource = 'wallpaper' | 'vitra' | 'custom'

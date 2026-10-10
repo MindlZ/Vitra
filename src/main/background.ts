@@ -1,9 +1,9 @@
 import { nativeImage, screen } from 'electron'
 import type { NativeImage, Rectangle } from 'electron'
-import { existsSync, promises as fs } from 'fs'
+import { existsSync, promises as fs, watch } from 'fs'
 import { userInfo } from 'os'
-import { dirname, extname, join } from 'path'
-import { findSteamPath, readRegistryValue } from './paths'
+import { dirname, extname, join, normalize } from 'path'
+import { findSteamPath, readRegistryValue, runCommand } from './paths'
 import { readLibraryFolders } from './scanners/steam'
 import { listRunningProcesses } from './watcher'
 import { artDir, getSettings, publicSettings, setSettings } from './store'
@@ -204,25 +204,74 @@ async function wallpaperEngineProject(file: string): Promise<DesktopSource | und
   } catch {
     // no project.json: no preview to find
   }
-  // a video's own frame beats the small square preview
-  if (project.type?.toLowerCase() === 'video') return { path: file, thumb: true }
+  // a video's own frame beats the small square preview. WE writes D:/... and the
+  // shell thumbnailer rejects forward slashes
+  if (project.type?.toLowerCase() === 'video') return { path: normalize(file), thumb: true }
   const preview = project.preview ? join(folder, project.preview) : undefined
   if (preview && existsSync(preview)) return { path: preview, thumb: !/\.(jpe?g|png)$/i.test(preview) }
   return undefined
 }
 
+let activeMonitors: { layout: string; ids: Promise<string[]> } | undefined
+
+// "DISPLAY\LNK0001\7&35581e40&0&UID256_0" -> "display#lnk0001#7&35581e40&0&uid256", how
+// WE's monitormap keys them ("//?/DISPLAY#...#{guid}"). one powershell per screen layout
+function connectedMonitorIds(layout: string): Promise<string[]> {
+  if (activeMonitors?.layout !== layout) {
+    const ids = runCommand('powershell.exe', [
+      '-NoProfile',
+      '-NonInteractive',
+      '-Command',
+      'Get-CimInstance -Namespace root\\wmi -ClassName WmiMonitorBasicDisplayParams | ? Active | % InstanceName'
+    ]).then((out) =>
+      out
+        .split(/\r?\n/)
+        .map((line) => line.trim().replace(/_\d+$/, '').replace(/\\/g, '#').toLowerCase())
+        .filter(Boolean)
+    )
+    activeMonitors = { layout, ids }
+    // empty is a failed query (powershell is slow while scans run at startup), not no screens
+    void ids.then((found) => {
+      if (!found.length && activeMonitors?.ids === ids) activeMonitors = undefined
+    })
+  }
+  return activeMonitors.ids
+}
+
+// MonitorN is the monitormap entry's location, and WE keeps entries for every
+// screen it has ever seen: with one screen left, it can be Monitor1 that shows
+async function connectedMonitorKeys(
+  monitormap: Record<string, { location?: number }> | undefined,
+  layout: string
+): Promise<string[] | undefined> {
+  if (!monitormap) return undefined
+  const ids = await connectedMonitorIds(layout)
+  const keys: string[] = []
+  for (const id of ids) {
+    const entry = Object.entries(monitormap).find(([key]) => key.toLowerCase().startsWith(`//?/${id}#`))?.[1]
+    if (typeof entry?.location !== 'number') return undefined
+    keys.push(`Monitor${entry.location}`)
+  }
+  return keys.length ? keys : undefined
+}
+
 // config.json: { <user>: { general: { wallpaperconfig: { selectedwallpapers:
-// { Monitor0: { file }, Monitor1: ... } } } } }. file is the project's main file;
-// project.json beside it names the preview. WE's numbering isn't Electron's, so
-// screens are told apart by their thumbnails in Settings
-async function wallpaperEngineSources(): Promise<DesktopSource[]> {
+// { Monitor0: { file }, Monitor1: ... } }, user: { monitormap } } } }. file is the
+// project's main file; project.json beside it names the preview. WE's numbering
+// isn't Electron's, so screens are told apart by their thumbnails in Settings
+async function wallpaperEngineConfig(): Promise<string | undefined> {
   const steam = await findSteamPath(getSettings().steamPath)
-  if (!steam) return []
+  if (!steam) return undefined
   let config: string | undefined
   for (const root of await readLibraryFolders(steam)) {
     const candidate = join(root, 'steamapps', 'common', 'wallpaper_engine', 'config.json')
     if (existsSync(candidate)) config = candidate
   }
+  return config
+}
+
+async function wallpaperEngineSources(layout: string): Promise<DesktopSource[]> {
+  const config = await wallpaperEngineConfig()
   if (!config) return []
   const running = await listRunningProcesses()
   if (!WE_EXES.some((exe) => running.has(exe))) return []
@@ -230,15 +279,23 @@ async function wallpaperEngineSources(): Promise<DesktopSource[]> {
   type Selected = Record<string, { file?: string }>
   const users = JSON.parse(await fs.readFile(config, 'utf8')) as Record<
     string,
-    { general?: { wallpaperconfig?: { selectedwallpapers?: Selected } } }
+    {
+      general?: {
+        wallpaperconfig?: { selectedwallpapers?: Selected }
+        user?: { monitormap?: Record<string, { location?: number }> }
+      }
+    }
   >
   const user = users[userInfo().username] ?? Object.values(users).find((u) => u?.general?.wallpaperconfig)
   const selected = user?.general?.wallpaperconfig?.selectedwallpapers ?? {}
-  // monitors unplugged since keep their entry: only as many as there are screens
-  const files = Object.entries(selected)
-    .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }))
-    .slice(0, screen.getAllDisplays().length)
-    .map(([, pick]) => pick?.file)
+  const keys = await connectedMonitorKeys(user?.general?.user?.monitormap, layout).catch(() => undefined)
+  // no monitormap match: guess the lowest entries, as many as there are screens
+  const files = keys
+    ? keys.map((key) => selected[key]?.file)
+    : Object.entries(selected)
+        .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }))
+        .slice(0, screen.getAllDisplays().length)
+        .map(([, pick]) => pick?.file)
 
   const sources: DesktopSource[] = []
   for (const file of files) {
@@ -251,9 +308,9 @@ async function wallpaperEngineSources(): Promise<DesktopSource[]> {
 // wallpaper engine first: what it pushes to windows lags behind and spans every
 // monitor. then windows' per-monitor copies (Transcoded_000...), then its single
 // copy (slideshows included), then the registry path (can point at a moved file)
-async function desktopSources(): Promise<DesktopSource[]> {
+async function desktopSources(layout: string): Promise<DesktopSource[]> {
   try {
-    const engine = await wallpaperEngineSources()
+    const engine = await wallpaperEngineSources(layout)
     if (engine.length) return engine
   } catch (err) {
     console.warn('[background] could not read wallpaper engine:', (err as Error).message)
@@ -293,24 +350,54 @@ function spanSlices(width: number, height: number): Rectangle[] | undefined {
 }
 
 let syncing: Promise<boolean> | undefined
+let queued: Promise<boolean> | undefined
 
 // copies the desktop wallpaper into art\, one image per screen, when it changed.
 // true = settings changed
 export function syncDesktopWallpaper(): Promise<boolean> {
-  syncing ??= syncDesktop().finally(() => (syncing = undefined))
-  return syncing
+  if (!syncing) {
+    syncing = syncDesktop().finally(() => (syncing = undefined))
+    return syncing
+  }
+  // a change mid-sync gets one more pass, or the running one keeps the old state
+  queued ??= syncing.then(() => {
+    queued = undefined
+    return syncDesktopWallpaper()
+  })
+  return queued
+}
+
+// WE rewrites config.json on every pick; windows replaces TranscodedWallpaper*.
+// folders, not files: both are replaced rather than written in place
+export async function watchDesktopWallpaper(onChange: () => void): Promise<void> {
+  const dirs = [join(process.env.APPDATA ?? '', 'Microsoft', 'Windows', 'Themes')]
+  const config = await wallpaperEngineConfig().catch(() => undefined)
+  if (config) dirs.push(dirname(config))
+  let timer: NodeJS.Timeout | undefined
+  for (const dir of dirs) {
+    try {
+      watch(dir, (_, name) => {
+        if (name && !/^(config\.json|transcoded)/i.test(name)) return
+        // WE writes in bursts
+        clearTimeout(timer)
+        timer = setTimeout(onChange, 1000)
+      }).on('error', () => undefined)
+    } catch (err) {
+      console.warn('[background] could not watch', dir, (err as Error).message)
+    }
+  }
 }
 
 async function syncDesktop(): Promise<boolean> {
   try {
-    const sources = await desktopSources()
-    if (!sources.length) return false
-    const stats = await Promise.all(sources.map((source) => fs.stat(source.path)))
-    // screens are in it too: plugging one in changes how a span slices
+    // screens are in the stamp too: plugging one in changes how a span slices
     const layout = screen
       .getAllDisplays()
       .map(({ bounds: b }) => `${b.x},${b.y},${b.width},${b.height}`)
       .join(';')
+    const sources = await desktopSources(layout)
+    if (!sources.length) return false
+    const stats = await Promise.all(sources.map((source) => fs.stat(source.path)))
     const stamp =
       sources.map((source, i) => `${source.path}|${stats[i].mtimeMs}:${stats[i].size}`).join('>') + `#${layout}`
     const { desktopScreens: previous = [], desktopStamp } = getSettings()
@@ -384,7 +471,7 @@ export async function clearBackground(): Promise<Settings> {
     backgroundImage: undefined,
     backgroundPalette: undefined,
     backgroundLightness: undefined,
-    wallpaper: wallpaper === 'custom' ? 'crimson' : wallpaper
+    wallpaper: wallpaper === 'custom' ? 'vigil' : wallpaper
   })
   if (previous) await fs.rm(join(artDir(), previous), { force: true })
   return publicSettings()

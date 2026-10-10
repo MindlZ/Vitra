@@ -1,8 +1,8 @@
 import type { Appearance, DesktopScreen, Palette, Settings, WallpaperPreset } from '@shared/types'
-import crimson from '../assets/wallpapers/crimson.jpg'
-import smoke from '../assets/wallpapers/smoke.jpg'
-import tree from '../assets/wallpapers/tree.jpg'
-import moon from '../assets/wallpapers/moon.jpg'
+import vigil from '../assets/wallpapers/vigil.jpg'
+import hex from '../assets/wallpapers/hex.jpg'
+import gate from '../assets/wallpapers/gate.jpg'
+import aurora from '../assets/wallpapers/aurora.jpg'
 import { artUrl } from './art'
 
 // files are pre-softened (96px wide, scaled back up); full-size sources aren't kept.
@@ -19,34 +19,34 @@ export interface Preset {
 
 export const PRESETS: Preset[] = [
   // the default. its palette is the brand crimson, paletteFromHue(15, 0.23), not
-  // extractPalette's: that caps L/C and gave a pale salmon (#ff857a) on this image
+  // extractPalette's: that caps L/C and gave a pale salmon (#ff8385) on this image
   {
-    id: 'crimson',
-    name: 'Crimson',
-    src: crimson,
-    lightness: 0.294,
+    id: 'vigil',
+    name: 'Vigil',
+    src: vigil,
+    lightness: 0.241,
     palette: { accent: '#ff3963', accentStrong: '#ec0050', ember: '#feb66e', tint: '#ffccce' }
   },
   {
-    id: 'smoke',
-    name: 'Smoke',
-    src: smoke,
-    lightness: 0.949,
-    palette: { accent: '#ff894f', accentStrong: '#f86a07', ember: '#e5c640', tint: '#ffcfb9' }
+    id: 'hex',
+    name: 'Hex',
+    src: hex,
+    lightness: 0.198,
+    palette: { accent: '#d48fe8', accentStrong: '#c37ad7', ember: '#fdaebb', tint: '#efcdf9' }
   },
   {
-    id: 'moon',
-    name: 'Moon',
-    src: moon,
-    lightness: 0.237,
-    palette: { accent: '#4cbcea', accentStrong: '#1fa9db', ember: '#bbc2fd', tint: '#aee4fe' }
+    id: 'gate',
+    name: 'Gate',
+    src: gate,
+    lightness: 0.221,
+    palette: { accent: '#61c593', accentStrong: '#41b47f', ember: '#7cd8e7', tint: '#b3eacb' }
   },
   {
-    id: 'tree',
-    name: 'Tree',
-    src: tree,
-    lightness: 0.9,
-    palette: { accent: '#fe867a', accentStrong: '#fe5d53', ember: '#fdb944', tint: '#fdcec8' }
+    id: 'aurora',
+    name: 'Aurora',
+    src: aurora,
+    lightness: 0.204,
+    palette: { accent: '#80aefd', accentStrong: '#699af1', ember: '#dfb2fe', tint: '#c9dcfd' }
   }
 ]
 
@@ -62,7 +62,7 @@ export interface ActiveWallpaper {
   fallbackLightness: number
 }
 
-// between the old palm image (0.72, dark) and the light presets (0.89+)
+// for your own image or the desktop; the presets are all dark (0.2-0.25)
 const LIGHT_FROM = 0.8
 
 export function appearanceFor(settings: Settings, wallpaper: ActiveWallpaper): Appearance {

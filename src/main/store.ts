@@ -29,7 +29,7 @@ const DEFAULT_SETTINGS: Settings = {
   perfOverlay: false,
   ambientSound: false,
   ambientVolume: 40,
-  wallpaper: 'crimson',
+  wallpaper: 'vigil',
   desktopScreen: 0,
   theme: 'auto',
   accentSource: 'wallpaper',
@@ -100,10 +100,16 @@ function migrateAccent(settings: Settings & { matchBackgroundColours?: boolean }
   delete settings.matchBackgroundColours
 }
 
-// presets that were removed; their old ids land on the default
-const RETIRED_WALLPAPERS = new Set(['sunset'])
+// removed presets, onto the one that took their slot
+const RETIRED_WALLPAPERS: Record<string, Settings['wallpaper']> = {
+  sunset: 'vigil',
+  crimson: 'vigil',
+  smoke: 'hex',
+  moon: 'aurora',
+  tree: 'gate'
+}
 function migrateWallpaper(settings: Settings): void {
-  if (RETIRED_WALLPAPERS.has(settings.wallpaper)) settings.wallpaper = DEFAULT_SETTINGS.wallpaper
+  settings.wallpaper = RETIRED_WALLPAPERS[settings.wallpaper] ?? settings.wallpaper
 }
 
 export async function load(): Promise<LibraryData> {

@@ -13,7 +13,9 @@ export const RELEASES: Release[] = [
       'Better names for games found by folder',
       'A wave behind Home, big picture and the screen saver',
       'Ambient sound',
-      'New logo, wallpaper and startup sound',
+      'Four new dark wallpapers: Vigil, Hex, Gate and Aurora',
+      'Follows Wallpaper Engine as it changes, video wallpapers too',
+      'New logo and startup sound',
       'Background apps like Wallpaper Engine no longer count as playtime'
     ]
   },

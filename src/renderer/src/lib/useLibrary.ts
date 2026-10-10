@@ -28,7 +28,7 @@ const DEFAULT_SETTINGS: Settings = {
   perfOverlay: false,
   ambientSound: false,
   ambientVolume: 40,
-  wallpaper: 'crimson',
+  wallpaper: 'vigil',
   desktopScreen: 0,
   theme: 'auto',
   accentSource: 'wallpaper',
