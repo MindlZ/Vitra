@@ -2,16 +2,17 @@
 ; vitraPaint (below), page by page
 
 ; the art's edges are exactly this, so they meet the pages seamlessly
-!define MUI_BGCOLOR "120B17"
-!define MUI_TEXTCOLOR "F5EFF6"
-!define VITRA_BG "120B17"
-!define VITRA_TEXT "F5EFF6"
-!define VITRA_FIELD "1E1526"
-!define VITRA_MUTED "8A7F91"
-; COLORREFs are 0xBBGGRR: field, text, and the Sunset coral (ff8482)
-!define VITRA_FIELD_REF 0x26151E
-!define VITRA_TEXT_REF 0xF6EFF5
-!define VITRA_ACCENT_REF 0x8284FF
+; the app's charcoal-crimson: the title bar, ink, raised, muted
+!define MUI_BGCOLOR "150A0E"
+!define MUI_TEXTCOLOR "F6EEF0"
+!define VITRA_BG "150A0E"
+!define VITRA_TEXT "F6EEF0"
+!define VITRA_FIELD "1E1116"
+!define VITRA_MUTED "95838A"
+; COLORREFs are 0xBBGGRR: field, text, and the crimson accent (ff3963)
+!define VITRA_FIELD_REF 0x16111E
+!define VITRA_TEXT_REF 0xF0EEF6
+!define VITRA_ACCENT_REF 0x6339FF
 
 ; this file is included before MUI2, so the functions live in customHeader
 !ifndef BUILD_UNINSTALLER

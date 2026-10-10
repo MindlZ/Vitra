@@ -9,12 +9,15 @@ import type { UpdateState } from '../shared/types'
 // repo comes from resources/app-update.yml, which electron-builder writes from
 // package.json `repository`. no file = unconfigured build, not an error
 
-const FIRST_CHECK_MS = 15_000
+const FIRST_CHECK_MS = 5_000
 const CHECK_EVERY_MS = 6 * 60 * 60 * 1000
+// a failed check (offline at login) shouldn't wait the full 6h
+const RETRY_MS = 30 * 60 * 1000
 
 let state: UpdateState = { status: 'idle', currentVersion: app.getVersion() }
 let firstCheck: NodeJS.Timeout | undefined
 let timer: NodeJS.Timeout | undefined
+let retry: NodeJS.Timeout | undefined
 let wired = false
 
 function configFile(): string {
@@ -65,6 +68,8 @@ function wire(): void {
   autoUpdater.on('error', (err) => {
     console.warn('[updater]', err?.message)
     set({ status: 'error', message: friendly(err), percent: undefined })
+    clearTimeout(retry)
+    if (timer) retry = setTimeout(() => void checkForUpdates(), RETRY_MS)
   })
 }
 
@@ -124,7 +129,8 @@ export async function installUpdate(beforeQuit: () => void): Promise<void> {
 export function scheduleUpdateChecks(): void {
   clearTimeout(firstCheck)
   clearInterval(timer)
-  firstCheck = timer = undefined
+  clearTimeout(retry)
+  firstCheck = timer = retry = undefined
   if (!available() || !getSettings().checkForUpdates) return
   firstCheck = setTimeout(() => void checkForUpdates(), FIRST_CHECK_MS)
   timer = setInterval(() => void checkForUpdates(), CHECK_EVERY_MS)

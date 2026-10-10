@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- 164x314 (NSIS at 100%). edges must stay exactly #120b17 = MUI_BGCOLOR -->
+<!-- 164x314 (NSIS at 100%). edges must stay exactly #150a0e = MUI_BGCOLOR -->
 <html>
   <head>
     <meta charset="utf-8" />
@@ -11,7 +11,7 @@
         height: 314px;
         position: relative;
         overflow: hidden;
-        background: #120b17;
+        background: #150a0e;
       }
       .glow {
         position: absolute;
@@ -20,7 +20,7 @@
         width: 210px;
         height: 170px;
         translate: -50% -50%;
-        background: radial-gradient(50% 50% at 50% 50%, rgb(255 132 130 / 0.34), rgb(255 132 130 / 0) 70%);
+        background: radial-gradient(50% 50% at 50% 50%, rgb(255 57 99 / 0.34), rgb(255 57 99 / 0) 70%);
       }
       .sky {
         position: absolute;
@@ -42,14 +42,14 @@
         border-radius: 50%;
         background: radial-gradient(
           circle at 50% 30%,
-          #fffafd 0%,
-          color-mix(in srgb, rgb(253 205 203) 60%, white) 38%,
-          color-mix(in srgb, #ff8482 60%, white) 72%,
-          #ff8482 100%
+          #fffaf4 0%,
+          oklch(0.93 0.05 55) 38%,
+          oklch(0.82 0.11 55) 72%,
+          oklch(0.72 0.15 55) 100%
         );
         box-shadow:
-          0 0 30px 4px rgb(255 132 130 / 0.55),
-          0 0 70px 18px rgb(255 132 130 / 0.2);
+          0 0 30px 4px oklch(0.72 0.15 55 / 0.5),
+          0 0 70px 18px oklch(0.72 0.15 55 / 0.18);
       }
       .mark {
         position: absolute;
@@ -57,7 +57,7 @@
         bottom: -4px;
         width: 84px;
         margin-left: -42px;
-        filter: drop-shadow(0 0 12px rgb(255 132 130 / 0.55));
+        filter: drop-shadow(0 0 12px rgb(255 57 99 / 0.55));
       }
       .water {
         position: absolute;
@@ -67,9 +67,9 @@
         height: 40%;
         background: repeating-linear-gradient(
           to bottom,
-          #120b17 0 1px,
+          #150a0e 0 1px,
           transparent 1px 3px,
-          #120b17 3px 5px,
+          #150a0e 3px 5px,
           transparent 5px 9px
         );
         opacity: 0.55;
@@ -84,12 +84,12 @@
         background: linear-gradient(
           90deg,
           transparent 0%,
-          rgb(253 205 203 / 0.55) 30%,
-          color-mix(in srgb, rgb(253 205 203) 55%, white 45%) 50%,
-          rgb(253 205 203 / 0.55) 70%,
+          rgb(255 204 206 / 0.55) 30%,
+          color-mix(in srgb, rgb(255 204 206) 55%, white 45%) 50%,
+          rgb(255 204 206 / 0.55) 70%,
           transparent 100%
         );
-        box-shadow: 0 0 10px rgb(255 132 130 / 0.6);
+        box-shadow: 0 0 10px rgb(255 57 99 / 0.6);
       }
     </style>
   </head>
