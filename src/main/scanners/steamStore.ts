@@ -8,6 +8,8 @@ export interface AppInfo {
   type: string
   // absent on entries cached before genres were fetched
   genres?: string[]
+  // feature ids (co-op, multiplayer...); absent on entries cached before they were fetched
+  categories?: string[]
   headerImage?: string
   capsuleImage?: string
   fetchedAt: number
@@ -56,7 +58,7 @@ const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout
 async function fetchAppInfo(appId: string): Promise<AppInfo | null> {
   try {
     const response = await fetch(
-      `https://store.steampowered.com/api/appdetails?appids=${appId}&filters=basic,genres`,
+      `https://store.steampowered.com/api/appdetails?appids=${appId}&filters=basic,genres,categories`,
       { signal: AbortSignal.timeout(12_000) }
     )
     if (response.status === 429) return null
@@ -72,6 +74,7 @@ async function fetchAppInfo(appId: string): Promise<AppInfo | null> {
           header_image?: string
           capsule_image?: string
           genres?: Array<{ id?: string }>
+          categories?: Array<{ id?: number }>
         }
       }
     >
@@ -82,6 +85,7 @@ async function fetchAppInfo(appId: string): Promise<AppInfo | null> {
       name: entry.data.name,
       type: entry.data.type ?? 'unknown',
       genres: (entry.data.genres ?? []).map((genre) => String(genre.id)).filter(Boolean),
+      categories: (entry.data.categories ?? []).map((category) => String(category.id)).filter(Boolean),
       headerImage: entry.data.header_image,
       capsuleImage: entry.data.capsule_image,
       fetchedAt: Date.now()
@@ -101,7 +105,7 @@ export async function resolveAppInfo(
   const stale = (info: AppInfo | undefined): boolean =>
     !info ||
     (info.type === 'unknown' && now - info.fetchedAt > UNKNOWN_TTL_MS) ||
-    (needGenres && info.type !== 'unknown' && !info.genres)
+    (needGenres && info.type !== 'unknown' && (!info.genres || !info.categories))
 
   const missing = [...new Set(appIds)].filter((id) => stale(cache[id])).slice(0, MAX_PER_SCAN)
 
@@ -122,6 +126,39 @@ export async function resolveAppInfo(
     if (info) result.set(appId, info)
   }
   return result
+}
+
+// title -> app id, null = no exact match. memory only: a miss is retried next run
+const searchMemo = new Map<string, string | null>()
+
+export function titleKey(title: string): string {
+  return title.toLowerCase().replace(/[^a-z0-9]/g, '')
+}
+
+// only an exact title match counts (punctuation and ™/® aside): a near miss would tag
+// a game with someone else's genres. undefined = the lookup failed
+export async function findSteamAppId(title: string): Promise<string | null | undefined> {
+  const key = titleKey(title)
+  if (!key) return null
+  if (searchMemo.has(key)) return searchMemo.get(key)
+  // the store search finds nothing for folder-style "Assassin's Creed - Odyssey"
+  const term = title.replace(/[™®©]/g, '').replace(/\s+-\s+/g, ' ')
+  try {
+    const response = await fetch(
+      `https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(term)}&l=english&cc=US`,
+      { signal: AbortSignal.timeout(12_000) }
+    )
+    if (!response.ok) return undefined
+    const body = (await response.json()) as { items?: Array<{ type?: string; name?: string; id?: number }> }
+    const match = (body.items ?? []).find(
+      (item) => item.type === 'app' && typeof item.id === 'number' && titleKey(item.name ?? '') === key
+    )
+    const id = match ? String(match.id) : null
+    searchMemo.set(key, id)
+    return id
+  } catch {
+    return undefined
+  }
 }
 
 // never fetches

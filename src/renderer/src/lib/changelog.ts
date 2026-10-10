@@ -6,6 +6,18 @@ export interface Release {
 // newest first. shown once after an update to a version listed here
 export const RELEASES: Release[] = [
   {
+    version: '0.3.1',
+    items: [
+      'Finds games in your Games folders, and any folder you add',
+      'Genre and co-op tags from Steam, automatically',
+      'Better names for games found by folder',
+      'A wave behind Home, big picture and the screen saver',
+      'Ambient sound',
+      'New logo, wallpaper and startup sound',
+      'Background apps like Wallpaper Engine no longer count as playtime'
+    ]
+  },
+  {
     version: '0.3.0',
     items: [
       'Synced lyrics, on Home, big picture and the screen saver',

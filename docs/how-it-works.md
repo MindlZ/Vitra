@@ -279,7 +279,7 @@ blurred and scaled up, a veil that pulls it down to a usable dark, and grain.
 Panels then `backdrop-filter` over all of it, so the glass picks up the
 wallpaper's colour.
 
-There are four bundled wallpapers (Sunset, Smoke, Moon and Tree, in
+There are four bundled wallpapers (Crimson, Smoke, Moon and Tree, in
 `assets/wallpapers/`), plus any image you choose. The bundled files are
 pre-softened rather than blurred at full size: each source was downscaled hard
 (96px wide) and scaled back up, a permanent blur that ships as ~50 KB and costs

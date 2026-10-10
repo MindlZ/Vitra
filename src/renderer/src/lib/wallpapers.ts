@@ -1,5 +1,5 @@
 import type { Appearance, DesktopScreen, Palette, Settings, WallpaperPreset } from '@shared/types'
-import sunset from '../assets/wallpapers/sunset.jpg'
+import crimson from '../assets/wallpapers/crimson.jpg'
 import smoke from '../assets/wallpapers/smoke.jpg'
 import tree from '../assets/wallpapers/tree.jpg'
 import moon from '../assets/wallpapers/moon.jpg'
@@ -18,12 +18,14 @@ export interface Preset {
 }
 
 export const PRESETS: Preset[] = [
+  // the default. its palette is the brand crimson, paletteFromHue(15, 0.23), not
+  // extractPalette's: that caps L/C and gave a pale salmon (#ff857a) on this image
   {
-    id: 'sunset',
-    name: 'Sunset',
-    src: sunset,
-    lightness: 0.577,
-    palette: { accent: '#ff8482', accentStrong: '#f96265', ember: '#feb858', tint: '#fdcdcb' }
+    id: 'crimson',
+    name: 'Crimson',
+    src: crimson,
+    lightness: 0.294,
+    palette: { accent: '#ff3963', accentStrong: '#ec0050', ember: '#feb66e', tint: '#ffccce' }
   },
   {
     id: 'smoke',

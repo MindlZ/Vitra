@@ -49,6 +49,8 @@ const api: LauncherApi = {
 
   setSettings: (patch: Partial<Settings>) => ipcRenderer.invoke('settings:set', patch),
   pickSteamPath: () => ipcRenderer.invoke('settings:pick-steam-path'),
+  addGameFolder: () => ipcRenderer.invoke('settings:add-game-folder'),
+  removeGameFolder: (index: number) => ipcRenderer.invoke('settings:remove-game-folder', index),
   pickBackground: () => ipcRenderer.invoke('settings:pick-background'),
   clearBackground: () => ipcRenderer.invoke('settings:clear-background'),
   setFullScreen: (on: boolean) => ipcRenderer.invoke('window:set-fullscreen', on),

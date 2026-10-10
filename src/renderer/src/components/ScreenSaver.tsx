@@ -5,16 +5,28 @@ import { triple } from '../lib/theme'
 import { Clock } from './Home'
 import Lyrics from './Lyrics'
 import Visualiser from './Visualiser'
+import Wave from './Wave'
 
 interface Props {
   leaving: boolean
+  wave: boolean
 }
 
 // burn-in protection
 const DRIFT_PX = 28
 const DRIFT_EVERY_MS = 60_000
 
-export default function ScreenSaver({ leaving }: Props) {
+// "r g b" strings; share = how much of a
+function mix(a: string, b: string, share: number): string {
+  const [ar, ag, ab] = a.split(/s+/).map(Number)
+  const [br, bg, bb] = b.split(/s+/).map(Number)
+  if (![ar, ag, ab].every(Number.isFinite)) return b
+  return [ar * share + br * (1 - share), ag * share + bg * (1 - share), ab * share + bb * (1 - share)]
+    .map(Math.round)
+    .join(' ')
+}
+
+export default function ScreenSaver({ leaving, wave }: Props) {
   const media = useMedia()
   const [shown, setShown] = useState(false)
   const [drift, setDrift] = useState({ x: 0, y: 0 })
@@ -70,13 +82,15 @@ export default function ScreenSaver({ leaving }: Props) {
     window.dispatchEvent(new Event('vitra:palette'))
   }, [colours])
 
-  // lightest and solid at the top, darker and fainter towards the horizon
+  // the theme accent at the tips, fading into the quiet art colour lower down; the
+  // body stays quiet so it doesn't draw the eye
+  const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent-rgb').trim()
   const visualiserColours = colours
     ? ({
         '--accent-rgb': colours.accent,
         '--accent-tint-rgb': colours.tint,
-        '--vis-peak': `rgb(${colours.peak})`,
-        '--vis-mid': `rgb(${colours.tint} / 0.85)`,
+        '--vis-peak': `rgb(${mix(accent, colours.peak, 0.7)})`,
+        '--vis-mid': `rgb(${mix(accent, colours.tint, 0.3)} / 0.85)`,
         '--vis-bottom': `rgb(${colours.accent} / 0.55)`,
         '--vis-line': colours.line
       } as CSSProperties)
@@ -92,6 +106,7 @@ export default function ScreenSaver({ leaving }: Props) {
     >
       {art && <img src={art} alt="" draggable={false} className="vitra-saver__glow" />}
       <div className="vitra-saver__veil" />
+      {wave && <Wave appearance="dark" centre={0.36} />}
 
       <div
         className="vitra-saver__stage"

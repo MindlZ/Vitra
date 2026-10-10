@@ -7,11 +7,13 @@ const CURRENT_VERSION = 1
 
 const DEFAULT_SETTINGS: Settings = {
   scanOnStart: true,
+  autoTags: true,
   trackPlaytime: true,
   minimiseOnLaunch: true,
   showFriends: true,
   backgroundDim: 65,
   backgroundParticles: true,
+  backgroundWave: true,
   glassBlur: true,
   visualiserPeaks: true,
   visualiserGlow: true,
@@ -25,13 +27,15 @@ const DEFAULT_SETTINGS: Settings = {
   lyricsWidgetSize: 'medium',
   visualiserWidgetSize: 'medium',
   perfOverlay: false,
-  wallpaper: 'sunset',
+  ambientSound: false,
+  ambientVolume: 40,
+  wallpaper: 'crimson',
   desktopScreen: 0,
   theme: 'auto',
   accentSource: 'wallpaper',
-  // the brand magenta
-  accentHue: 344,
-  accentChroma: 0.2,
+  // the brand crimson
+  accentHue: 15,
+  accentChroma: 0.23,
   programsView: 'library',
   bigPictureOnStart: false,
   closeToTray: true,
@@ -96,6 +100,12 @@ function migrateAccent(settings: Settings & { matchBackgroundColours?: boolean }
   delete settings.matchBackgroundColours
 }
 
+// presets that were removed; their old ids land on the default
+const RETIRED_WALLPAPERS = new Set(['sunset'])
+function migrateWallpaper(settings: Settings): void {
+  if (RETIRED_WALLPAPERS.has(settings.wallpaper)) settings.wallpaper = DEFAULT_SETTINGS.wallpaper
+}
+
 export async function load(): Promise<LibraryData> {
   let migrate = false
   try {
@@ -105,6 +115,7 @@ export async function load(): Promise<LibraryData> {
     // pre-presets files
     if (!parsed.settings?.wallpaper && settings.backgroundImage) settings.wallpaper = 'custom'
     migrateAccent(settings)
+    migrateWallpaper(settings)
     // pre-encryption files had plain keys: rewrite straight away
     migrate = SECRET_KEYS.some((key) => Boolean(parsed.settings?.[key]))
     data = {
@@ -161,6 +172,8 @@ function normaliseGame(game: Partial<Game>): Game {
     sessions: game.sessions ?? 0,
     lastPlayed: game.lastPlayed,
     addedAt: game.addedAt ?? Date.now(),
+    autoName: typeof game.autoName === 'boolean' ? game.autoName : undefined,
+    autoTagged: game.autoTagged === true ? true : undefined,
     preferredStore: game.preferredStore,
     companions: game.companions?.filter((path) => typeof path === 'string'),
     closeCompanions: game.closeCompanions,
@@ -220,6 +233,7 @@ export function removeGame(id: string): boolean {
 export function restoreLibrary(games: Array<Partial<Game>>, settings: Partial<Settings>): Promise<void> {
   const next: Settings = { ...DEFAULT_SETTINGS, ...settings }
   migrateAccent(next)
+  migrateWallpaper(next)
   for (const key of SECRET_KEYS) next[key] = data.settings[key]
   delete next.keysSet
   data = { ...data, games: games.map(normaliseGame), settings: next }

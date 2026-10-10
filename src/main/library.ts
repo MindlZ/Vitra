@@ -1,6 +1,8 @@
 import { randomUUID } from 'crypto'
 import { basename, dirname } from 'path'
-import { getGames, getSettings, patchGame, replaceGames, upsertGame } from './store'
+import { existsSync } from 'fs'
+import { getGame, getGames, getSettings, patchGame, replaceGames, setSettings, upsertGame } from './store'
+import { detectGameFolders, scanGameFolders } from './scanners/folders'
 import { IGNORED_APP_IDS, isGameLike, ownedSteamGame, scanSteam } from './scanners/steam'
 import { scanSteamShortcuts } from './scanners/steamShortcuts'
 import { scanEpic } from './scanners/epic'
@@ -9,6 +11,8 @@ import { scanXbox } from './scanners/xbox'
 import { scanLaunchers } from './scanners/launchers'
 import { readSteamPlaytime } from './scanners/steamPlaytime'
 import { resolveAppInfo } from './scanners/steamStore'
+import { refetchAutoArt } from './art'
+import { exeStem, guessGameName, guessGameNames } from './gameName'
 import type { Game, ScanResult } from '../shared/types'
 
 // only these are the scan's; everything else is the user's
@@ -84,6 +88,15 @@ export async function scanLibrary(): Promise<ScanResult> {
     }
   }
 
+  // after the stores, so a store's game isn't found twice
+  const folders = await scanGameFolders(
+    await gameFolders(),
+    [...discovered, ...getGames()],
+    getSettings().dismissedGames ?? []
+  )
+  errors.push(...folders.errors)
+  discovered.push(...folders.games)
+
   const discoveredIds = new Set(discovered.map((game) => game.id))
   const existing = getGames()
   const byId = new Map(existing.map((game) => [game.id, game]))
@@ -95,6 +108,15 @@ export async function scanLibrary(): Promise<ScanResult> {
   const next: Game[] = []
 
   for (const game of existing) {
+    // a folder find whose folder went (deleted, drive unplugged) dims like a store game
+    if (game.id.startsWith('local:') && game.exePath) {
+      const installed = existsSync(game.exePath)
+      // never played or touched: a moved/renamed folder is just found again under its new path
+      const untouched = !game.playtimeSeconds && !game.favorite && !game.tags.length && game.autoName !== false
+      if (!installed && untouched) continue
+      next.push({ ...game, installed })
+      continue
+    }
     if (game.source === 'manual' || discoveredIds.has(game.id)) {
       next.push(game)
       continue
@@ -118,6 +140,7 @@ export async function scanLibrary(): Promise<ScanResult> {
   }
 
   replaceGames([...nextById.values()])
+  await renameExeNamedGames()
   return {
     added,
     updated,
@@ -129,6 +152,7 @@ export async function scanLibrary(): Promise<ScanResult> {
       gog: gog.games.length - gog.owned,
       xbox: xbox.games.length,
       launchers: launchers.games.length,
+      folders: folders.games.length,
       owned: ownedCount + epic.owned + gog.owned
     },
     errors
@@ -164,13 +188,52 @@ export async function classifySoftware(): Promise<boolean> {
   return changed
 }
 
-export function addManualGame(input: {
+// seeded once with drive-root Games folders; after that the list is the user's
+async function gameFolders(): Promise<string[]> {
+  const saved = getSettings().gameFolders
+  if (saved) return saved
+  const detected = await detectGameFolders()
+  setSettings({ gameFolders: detected })
+  return detected
+}
+
+// once per run: a game whose exe gives nothing better would respawn powershell every scan
+const nameGuessed = new Set<string>()
+
+// guessed names get re-guessed as the guessing improves; older manual games still carry
+// the exe's name. a name the user typed (autoName false) is never touched
+async function renameExeNamedGames(): Promise<void> {
+  const stale = getGames().filter(
+    (game) =>
+      game.source === 'manual' &&
+      game.exePath &&
+      game.autoName !== false &&
+      !nameGuessed.has(game.id) &&
+      // local: finds from before autoName existed count as guessed
+      (game.autoName || game.id.startsWith('local:') || game.name === exeStem(game.exePath))
+  )
+  for (const game of stale) nameGuessed.add(game.id)
+  const names = await guessGameNames(
+    stale.map((game) => ({
+      exePath: game.exePath!,
+      folder: game.id.startsWith('local:') && game.installDir ? basename(game.installDir) : undefined
+    }))
+  )
+  for (const [i, game] of stale.entries()) {
+    // re-read: the user may have renamed it meanwhile
+    if (names[i] === game.name || getGame(game.id)?.name !== game.name) continue
+    patchGame(game.id, { name: names[i], autoName: true })
+    await refetchAutoArt(game.id)
+  }
+}
+
+export async function addManualGame(input: {
   name?: string
   exePath: string
   args?: string
   tags?: string[]
-}): Game {
-  const name = input.name?.trim() || basename(input.exePath).replace(/\.(exe|lnk|bat|cmd)$/i, '')
+}): Promise<Game> {
+  const name = input.name?.trim() || (await guessGameName(input.exePath))
   const game: Game = {
     id: `manual:${randomUUID()}`,
     name,
@@ -185,7 +248,8 @@ export function addManualGame(input: {
     installed: true,
     playtimeSeconds: 0,
     sessions: 0,
-    addedAt: Date.now()
+    addedAt: Date.now(),
+    autoName: !input.name?.trim()
   }
   return upsertGame(game)
 }

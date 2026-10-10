@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Appearance } from '@shared/types'
 import Particles from './Particles'
+import Wave from './Wave'
 
 interface Props {
   dim: number
@@ -10,6 +11,8 @@ interface Props {
   fallbackLightness?: number
   appearance: Appearance
   particles: boolean
+  // undefined = setting off (not mounted); false = mounted, faded out
+  wave?: boolean
 }
 
 // the veil was tuned on a ~0.72 lightness image; near-white ones came through
@@ -83,7 +86,8 @@ export default function Backdrop({
   lightness,
   fallbackLightness,
   appearance,
-  particles
+  particles,
+  wave
 }: Props) {
   const [failed, setFailed] = useState<string | null>(null)
   const src = failed === wanted ? fallback : wanted
@@ -127,6 +131,7 @@ export default function Backdrop({
         className="vitra-backdrop__veil"
         style={{ opacity: Math.min(100, Math.max(MIN_DIM, dim)) / 100 }}
       />
+      {wave !== undefined && <Wave appearance={appearance} visible={wave} />}
       {particles && <Particles appearance={appearance} />}
       <div className="vitra-backdrop__grain" style={{ backgroundImage: grain() }} />
     </div>

@@ -210,7 +210,8 @@ export async function adoptRunningGames(): Promise<void> {
   const claims = new Map<string, Game[]>()
   const namesOf = new Map<string, string[]>()
   for (const game of getGames()) {
-    if (!game.installed) continue
+    // background software (Wallpaper Engine) runs all day: adopting it logged hours of "play"
+    if (!game.installed || (game.softwareOverride ?? game.software)) continue
     const names = new Set(
       [...(game.processHints ?? []), ...(game.exePath ? [basename(game.exePath)] : [])].map((name) =>
         name.toLowerCase()
@@ -233,7 +234,8 @@ export async function adoptRunningGames(): Promise<void> {
   // steam games only learn exe names from a launch; steam itself says what's running
   const steamId = parseInt((await readRegistryValue('HKCU\\Software\\Valve\\Steam', 'RunningAppID')) ?? '', 16)
   const steamGame = steamId > 0 ? getGame(`steam:${steamId}`) : undefined
-  if (steamGame?.installed && !found.has(steamGame.id)) {
+  const steamSoftware = steamGame && (steamGame.softwareOverride ?? steamGame.software)
+  if (steamGame?.installed && !steamSoftware && !found.has(steamGame.id)) {
     const hints = (await resolveProcessHints(steamGame)).map((name) => name.toLowerCase())
     if (hints.some((name) => running.has(name))) {
       if (!steamGame.processHints?.length) patchGame(steamGame.id, { processHints: hints })

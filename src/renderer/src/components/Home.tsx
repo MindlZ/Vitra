@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { Download, KeyRound, Play } from 'lucide-react'
 import type { Friend, Game, RunningState } from '@shared/types'
 import { useArt } from '../lib/art'
@@ -135,7 +135,7 @@ function ContinueCard({
           <div
             className="h-full w-full"
             style={{
-              background: `radial-gradient(120% 120% at 80% 100%, hsl(${hue} 48% 30%) 0%, hsl(${(hue + 30) % 360} 40% 14%) 55%, #0c0713 100%)`
+              background: `radial-gradient(120% 120% at 80% 100%, hsl(${hue} 48% 30%) 0%, hsl(${(hue + 30) % 360} 40% 14%) 55%, #0c0709 100%)`
             }}
           />
         )}
@@ -274,6 +274,43 @@ export function Friends({ onOpenSettings }: { onOpenSettings: () => void }) {
   )
 }
 
+// widest things in each band, padding included
+const STACK_WIDTH = 760 + 64
+const ROW_WIDTH = 1080
+
+// Home sits right of the sidebar, but the title bar's visualiser, the wallpaper
+// and the wave are centred on the window: the clock read as off-centre next to
+// them. shifts both bands onto the window's centre line, as far as the space
+// allows (never under the sidebar). measured, so it follows the sidebar's animation
+function useWindowCentre(ref: RefObject<HTMLDivElement | null>): { stack: number; row: number } {
+  const [shift, setShift] = useState({ stack: 0, row: 0 })
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const measure = (): void => {
+      const box = el.getBoundingClientRect()
+      const off = box.left + box.width / 2 - window.innerWidth / 2
+      const toward = (width: number): number => {
+        const slack = Math.max(0, (box.width - Math.min(width, box.width)) / 2)
+        return -Math.round(Math.sign(off) * Math.min(Math.abs(off), slack))
+      }
+      setShift((prev) => {
+        const next = { stack: toward(STACK_WIDTH), row: toward(ROW_WIDTH) }
+        return prev.stack === next.stack && prev.row === next.row ? prev : next
+      })
+    }
+    const observer = new ResizeObserver(measure)
+    observer.observe(el)
+    window.addEventListener('resize', measure)
+    measure()
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', measure)
+    }
+  }, [ref])
+  return shift
+}
+
 export default function Home({ games, running, onOpen, onPlay, onBrowse, onOpenSettings }: Props) {
   const runningIds = useMemo(() => new Set(running.map((state) => state.gameId)), [running])
 
@@ -289,10 +326,16 @@ export default function Home({ games, running, onOpen, onPlay, onBrowse, onOpenS
     return best
   }, [games, runningIds])
 
+  const root = useRef<HTMLDivElement>(null)
+  const shift = useWindowCentre(root)
+
   // never scrolls: sizes are vh-based
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-8 pt-4">
+    <div ref={root} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div
+        className="flex min-h-0 flex-1 flex-col items-center justify-center px-8 pt-4"
+        style={{ translate: `${shift.stack}px 0` }}
+      >
         <Clock />
         <Visualiser className="mt-[clamp(8px,2.5vh,24px)] h-[clamp(70px,15vh,130px)] max-w-[760px] shrink-0 [mask-image:linear-gradient(to_right,transparent,black_18%,black_82%,transparent)]" />
         {/* min-h: no jump when a track starts/stops */}
@@ -302,7 +345,10 @@ export default function Home({ games, running, onOpen, onPlay, onBrowse, onOpenS
         <Lyrics place="home" className="mt-1 w-full max-w-[560px] shrink-0" />
       </div>
 
-      <div className="mx-auto flex w-full max-w-[1080px] shrink-0 items-end justify-between gap-6 px-6 pt-4 pb-6">
+      <div
+        className="mx-auto flex w-full max-w-[1080px] shrink-0 items-end justify-between gap-6 px-6 pt-4 pb-6"
+        style={{ translate: `${shift.row}px 0` }}
+      >
         {featured ? (
           <ContinueCard
             game={featured}

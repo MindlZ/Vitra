@@ -15,7 +15,7 @@ export default function CoverImage({ game, className = '', captionless = false }
   // .icon. files are square (art.ts); letterbox, don't crop
   const isIcon = Boolean(url && url.includes('.icon.'))
 
-  const plate = `linear-gradient(158deg, hsl(${hue} 38% 26%) 0%, hsl(${(hue + 42) % 360} 34% 14%) 56%, #0c0713 100%)`
+  const plate = `linear-gradient(158deg, hsl(${hue} 38% 26%) 0%, hsl(${(hue + 42) % 360} 34% 14%) 56%, #0c0709 100%)`
 
   if (url && !isIcon) {
     return (

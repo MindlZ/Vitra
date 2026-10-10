@@ -215,6 +215,22 @@ export async function clearArt(gameId: string, kind: ArtKind): Promise<void> {
   misses.delete(`${gameId}:${kind}`)
 }
 
+// after a rename: art found under the old name (or the exe icon) goes; hand-picked art stays
+export async function refetchAutoArt(gameId: string): Promise<void> {
+  const game = getGame(gameId)
+  if (!game || game.steamAppId) return
+  const cleared: Partial<Game> = {}
+  for (const kind of Object.keys(FILE_KEY) as ArtKind[]) {
+    misses.delete(`${gameId}:${kind}`)
+    const file = game[FILE_KEY[kind]]
+    // setLocalArt names are timestamped
+    if (!file || new RegExp(`-${kind}-\\d+\\.`).test(file)) continue
+    await fs.rm(join(artDir(), file), { force: true })
+    cleared[FILE_KEY[kind]] = undefined
+  }
+  if (Object.keys(cleared).length) patchGame(gameId, cleared)
+}
+
 export function retryMissingArt(): void {
   misses.clear()
 }

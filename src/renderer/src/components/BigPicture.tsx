@@ -65,6 +65,7 @@ interface Props {
   programsView: ProgramsView
   backgroundDim: number
   backgroundParticles: boolean
+  backgroundWave: boolean
   wallpaper: ActiveWallpaper
   // used on Home only; the library tabs sit over game art and stay dark
   appearance: Appearance
@@ -535,7 +536,7 @@ function ContinueTile({
             <div
               className="h-full w-full"
               style={{
-                background: `radial-gradient(120% 120% at 80% 100%, hsl(${hue} 48% 30%) 0%, hsl(${(hue + 30) % 360} 40% 14%) 55%, #0c0713 100%)`
+                background: `radial-gradient(120% 120% at 80% 100%, hsl(${hue} 48% 30%) 0%, hsl(${(hue + 30) % 360} 40% 14%) 55%, #0c0709 100%)`
               }}
             />
           )}
@@ -845,6 +846,7 @@ export default function BigPicture({
   programsView,
   backgroundDim,
   backgroundParticles,
+  backgroundWave,
   wallpaper,
   appearance,
   suspended,
@@ -988,6 +990,7 @@ export default function BigPicture({
         dim={backgroundDim}
         appearance={onHome ? appearance : 'dark'}
         particles={backgroundParticles}
+        wave={backgroundWave ? onHome : undefined}
         {...wallpaper}
       />
       {!onHome && selected && (

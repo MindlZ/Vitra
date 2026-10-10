@@ -24,6 +24,9 @@ import { setVisualiserLook } from './components/Visualiser'
 import PerfOverlay from './components/PerfOverlay'
 import { setLyricsPlaces } from './lib/lyrics'
 import { setBackgroundPacing, setGameRunning } from './lib/pace'
+import { useAmbient, useWindowVisible } from './lib/ambient'
+import { copyIds } from './lib/duplicates'
+import { useMedia } from './lib/media'
 import { setPerfRecording, setPerfView } from './lib/perf'
 import { hasSource, inLibrary, isSoftware, matchesQuery, sourceLabel } from './lib/format'
 import { useGamepad } from './lib/gamepad'
@@ -55,7 +58,6 @@ function titleFor(filter: Filter): string {
     const source = filter.slice(7)
     return source === 'manual' ? 'Local files' : sourceLabel(source)
   }
-  if (filter.startsWith('tag:')) return filter.slice(4)
   return 'Library'
 }
 
@@ -71,9 +73,10 @@ function inScope(game: Game, filter: Filter, programsView: ProgramsView): boolea
   if (filter === 'recent') return Boolean(game.lastPlayed)
   if (filter === 'unplayed') return !game.playtimeSeconds
   if (filter.startsWith('source:')) return hasSource(game, filter.slice(7))
-  if (filter.startsWith('tag:')) return game.tags.includes(filter.slice(4))
   return true
 }
+
+const BIG_PICTURE_DUCK_MS = { enter: 5000, exit: 2500 }
 
 // per-machine view pref, so localStorage, not library.json
 const SIDEBAR_KEY = 'vitra.sidebarCollapsed'
@@ -115,6 +118,8 @@ export default function App() {
   const [filter, setFilter] = useState<Filter>('home')
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState<SortKey>('name')
+  // on top of the sidebar's filter; '' = any. tags stay out of the sidebar (user's call)
+  const [tag, setTag] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
@@ -139,6 +144,9 @@ export default function App() {
   const [curtainRun, setCurtainRun] = useState(0)
   const transition = useRef(0)
   const switchedOnce = useRef(false)
+  // ambient steps aside for the big picture sound, then fades back
+  const [ambientDucked, setAmbientDucked] = useState(false)
+  const unduck = useRef<ReturnType<typeof setTimeout>>(undefined)
   const toggleBigPicture = useCallback((on?: boolean) => {
     const next = on ?? !bigPictureNow.current
     if (next === bigPictureNow.current) return
@@ -150,6 +158,10 @@ export default function App() {
 
     stopSound(next ? 'big-picture-exit' : 'big-picture-enter')
     playSound(next ? 'big-picture-enter' : 'big-picture-exit', 0.45)
+    setAmbientDucked(true)
+    clearTimeout(unduck.current)
+    // enter has a long tail (7.7s); exit is ~3s
+    unduck.current = setTimeout(() => setAmbientDucked(false), next ? BIG_PICTURE_DUCK_MS.enter : BIG_PICTURE_DUCK_MS.exit)
 
     void (async () => {
       setCurtainRun(0)
@@ -220,7 +232,7 @@ export default function App() {
   }, [loading, settings.bigPictureOnStart])
 
   // wait for real settings: the defaults have no palette, so clearing the cached
-  // one would flash magenta
+  // one would flash the default crimson
   const wallpaper = activeWallpaper(settings)
   const palette =
     settings.accentSource === 'custom'
@@ -246,9 +258,31 @@ export default function App() {
     setVisualiserLook({ peaks: settings.visualiserPeaks, glow: settings.visualiserGlow })
   }, [settings.visualiserPeaks, settings.visualiserGlow])
 
-  const gameRunning = running.some((state) => state.confirmed)
+  // software (Wallpaper Engine, always on) isn't "playing": no pausing or muting for it
+  const playing = useMemo(() => {
+    const software = new Set(games.filter(isSoftware).flatMap(copyIds))
+    return running.filter((state) => !software.has(state.gameId))
+  }, [games, running])
+  const gameRunning = playing.some((state) => state.confirmed)
   useEffect(() => setGameRunning(gameRunning), [gameRunning])
   useEffect(() => setBackgroundPacing(settings.slowWhenUnfocused), [settings.slowWhenUnfocused])
+
+  const windowVisible = useWindowVisible()
+  const media = useMedia()
+  // launching counts too (running, not just confirmed): it fades as the game starts
+  const ambientHeld = playing.length
+    ? 'Paused while a game runs'
+    : media?.status === 'Playing'
+      ? 'Paused while other audio plays'
+      : undefined
+  const ambientState = useAmbient(
+    settings.ambientSound,
+    windowVisible && !splash && !ambientHeld,
+    settings.ambientVolume,
+    ambientDucked
+  )
+  const ambientStatus =
+    ambientHeld ?? (ambientState === 'running' ? 'Playing' : ambientState ? 'Not playing' : undefined)
   const { lyrics, lyricsHome, lyricsBigPicture, lyricsSaver } = settings
   useEffect(
     () => setLyricsPlaces({ home: lyrics && lyricsHome, tv: lyrics && lyricsBigPicture, saver: lyrics && lyricsSaver }),
@@ -278,6 +312,7 @@ export default function App() {
     const filtered = games.filter(
       (game) =>
         inScope(game, filter, settings.programsView) &&
+        (!tag || game.tags.includes(tag)) &&
         (matchesQuery(game.name, query) || game.tags.some((tag) => matchesQuery(tag, query)))
     )
 
@@ -290,7 +325,12 @@ export default function App() {
       return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
     })
     return sorted
-  }, [games, filter, query, sort, settings.programsView])
+  }, [games, filter, query, sort, tag, settings.programsView])
+
+  // the last game with that tag lost it
+  useEffect(() => {
+    if (tag && !allTags.includes(tag)) setTag('')
+  }, [tag, allTags])
 
   useEffect(() => {
     if (filter === 'programs' && settings.programsView !== 'tab') setFilter('all')
@@ -398,6 +438,7 @@ export default function App() {
           dim={settings.backgroundDim}
           appearance={appearance}
           particles={settings.backgroundParticles}
+          wave={settings.backgroundWave ? filter === 'home' && !selected : undefined}
           {...wallpaper}
         />
       )}
@@ -415,6 +456,7 @@ export default function App() {
             programsView={settings.programsView}
             backgroundDim={settings.backgroundDim}
             backgroundParticles={settings.backgroundParticles}
+            backgroundWave={settings.backgroundWave}
             wallpaper={wallpaper}
             appearance={appearance}
             suspended={settingsOpen}
@@ -507,6 +549,20 @@ export default function App() {
                 </span>
 
                 <div className="ml-auto flex shrink-0 items-center gap-2.5 text-[11px] text-muted">
+                  {allTags.length > 0 && (
+                    <>
+                      <span aria-hidden>Tag</span>
+                      <Dropdown
+                        label="Filter by tag"
+                        value={tag}
+                        onChange={setTag}
+                        options={[
+                          { value: '', label: 'Any' },
+                          ...allTags.map((name) => ({ value: name, label: name }))
+                        ]}
+                      />
+                    </>
+                  )}
                   <span aria-hidden>Sort</span>
                   <Dropdown
                     label="Sort by"
@@ -615,7 +671,10 @@ export default function App() {
             scanning={scanning}
             onClose={() => setSettingsOpen(false)}
             onChange={(patch) => void library.updateSettings(patch)}
+            ambientStatus={ambientStatus}
             onPickSteamPath={() => void library.pickSteamPath()}
+            onAddGameFolder={() => void library.addGameFolder().then((added) => (added ? scan() : undefined))}
+            onRemoveGameFolder={(index) => void library.removeGameFolder(index)}
             onPickBackground={() => void library.pickBackground()}
             onClearBackground={() => void library.clearBackground()}
             onOpenBigPicture={() => {
@@ -638,7 +697,7 @@ export default function App() {
 
         {toast && <Toast message={toast} onDismiss={() => setToast(null)} />}
 
-        {saverShown && <ScreenSaver leaving={!idle} />}
+        {saverShown && <ScreenSaver leaving={!idle} wave={settings.backgroundWave} />}
       </div>
 
       {curtain !== 'off' && (

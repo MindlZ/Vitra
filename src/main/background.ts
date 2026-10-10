@@ -384,7 +384,7 @@ export async function clearBackground(): Promise<Settings> {
     backgroundImage: undefined,
     backgroundPalette: undefined,
     backgroundLightness: undefined,
-    wallpaper: wallpaper === 'custom' ? 'sunset' : wallpaper
+    wallpaper: wallpaper === 'custom' ? 'crimson' : wallpaper
   })
   if (previous) await fs.rm(join(artDir(), previous), { force: true })
   return publicSettings()

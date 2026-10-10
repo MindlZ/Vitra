@@ -1,4 +1,5 @@
 import { getSettings } from '../store'
+import { cleanTitle } from '../gameName'
 
 const BASE = 'https://www.steamgriddb.com/api/v2'
 
@@ -59,7 +60,8 @@ export async function steamGridDbCandidates(
   const path = game.steamAppId
     ? `/${ENDPOINT[kind]}/steam/${game.steamAppId}${QUERY[kind]}`
     : await (async () => {
-        const id = await findGameIdByName(game.name, key)
+        // folder-style "Assassin's Creed - Odyssey" searches badly with the dash
+        const id = await findGameIdByName(cleanTitle(game.name).replace(/\s+-\s+/g, ' '), key)
         return id === null ? null : `/${ENDPOINT[kind]}/game/${id}${QUERY[kind]}`
       })()
 

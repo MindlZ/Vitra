@@ -12,8 +12,7 @@ import {
   HardDriveDownload,
   House,
   LayoutGrid,
-  Star,
-  Tag as TagIcon
+  Star
 } from 'lucide-react'
 import CoffeeIcon from './CoffeeIcon'
 import { GAME_SOURCES, type Game, type ProgramsView } from '@shared/types'
@@ -329,8 +328,7 @@ function MoreIndicator({ direction, onClick }: { direction: 'up' | 'down'; onCli
 function RowContent({ row, active, collapsed }: { row: Row; active: boolean; collapsed: boolean }) {
   const Icon = row.icon
   const logo = collapsed ? STORE_LOGOS[row.key] : undefined
-  // collapsed, every tag would get the same icon
-  const useMonogram = collapsed && !logo && (!Icon || row.key.startsWith('tag:'))
+  const useMonogram = collapsed && !logo && !Icon
   const tone = active ? 'text-accent' : 'text-muted group-hover:text-dim'
   return (
     <>
@@ -363,15 +361,10 @@ export default function Sidebar({
   concealed = false,
   slow = false
 }: Props) {
-  const { library, sources, tags, extras, totalSeconds } = useMemo(() => {
+  const { library, sources, extras, totalSeconds } = useMemo(() => {
     // counts include uninstalled games: "Not installed" is a lens, not a partition
     const visible = games.filter((game) => inLibrary(game, programsView))
     const programs = games.filter((game) => !game.hidden && isSoftware(game)).length
-
-    const tagCounts = new Map<string, number>()
-    for (const game of visible) {
-      for (const tag of game.tags) tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1)
-    }
 
     const rows: Row[] = []
     const uninstalled = visible.filter((game) => !game.installed).length
@@ -418,9 +411,6 @@ export default function Sidebar({
           count: visible.filter((game) => hasSource(game, source)).length
         }))
         .filter((row) => (row.count ?? 0) > 0) as Row[],
-      tags: [...tagCounts.entries()]
-        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-        .map(([tag, count]) => ({ key: `tag:${tag}`, label: tag, count, icon: TagIcon })) as Row[],
       extras: rows
     }
   }, [games, programsView])
@@ -439,7 +429,6 @@ export default function Sidebar({
             [undefined, HOME_ROWS],
             ['Library', library],
             ['Stores', sources],
-            ['Tags', tags],
             ['Other', extras]
           ] as [string | undefined, Row[]][]
         ).map(([title, rows]) => (

@@ -141,7 +141,7 @@ export async function importBackup(win: BrowserWindow | null): Promise<BackupRes
   const settings = { ...backup.settings, steamPath: getSettings().steamPath }
   if (settings.backgroundImage && !(settings.backgroundImage in backup.art)) {
     delete settings.backgroundImage
-    if (settings.wallpaper === 'custom') settings.wallpaper = 'sunset'
+    if (settings.wallpaper === 'custom') settings.wallpaper = 'crimson'
   }
 
   await restoreLibrary(backup.games, settings)

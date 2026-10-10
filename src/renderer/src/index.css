@@ -1,13 +1,13 @@
 @import 'tailwindcss';
 
 @theme {
-  --color-base: #0b0711;
-  --color-panel: #120c1a;
-  --color-raised: #1a1324;
+  --color-base: #0c0709;
+  --color-panel: #150b0f;
+  --color-raised: #1e1116;
 
-  --color-ink: #f5eff6;
-  --color-dim: #c0b4c6;
-  --color-muted: #8d8398;
+  --color-ink: #f6eef0;
+  --color-dim: #c7b5ba;
+  --color-muted: #95838a;
 
   --color-line: rgba(255, 255, 255, 0.09);
   --color-line-soft: rgba(255, 255, 255, 0.055);
@@ -16,8 +16,8 @@
   /* real white: `white` gets re-pointed in light mode */
   --color-snow: #ffffff;
 
-  --color-accent: #ff6ecb;
-  --color-accent-strong: #f84bb9;
+  --color-accent: #ff3963;
+  --color-accent-strong: #ec0050;
   /* favourites only */
   --color-ember: #ffb079;
   --color-danger: #f4484a;
@@ -28,31 +28,31 @@
 }
 
 :root {
-  /* theme.ts overrides these from the wallpaper: never hard-code the magenta */
-  --accent-rgb: 255 110 203;
-  --accent-tint-rgb: 255 190 232;
+  /* theme.ts overrides these from the wallpaper: never hard-code the crimson */
+  --accent-rgb: 255 57 99;
+  --accent-tint-rgb: 255 204 206;
 
   --glass-fill: rgba(255, 255, 255, 0.05);
-  --glass-fill-strong: rgba(24, 16, 33, 0.74);
+  --glass-fill-strong: rgba(30, 15, 20, 0.74);
   --glass-fill-soft: rgba(255, 255, 255, 0.03);
   --glass-line: rgba(255, 255, 255, 0.09);
   --glass-line-soft: rgba(255, 255, 255, 0.055);
   --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.075);
   --glass-blur: blur(22px) saturate(160%);
   --glass-hover: rgba(255, 255, 255, 0.08);
-  --glass-chrome: rgba(13, 8, 20, 0.52);
+  --glass-chrome: rgba(16, 8, 11, 0.52);
   --dialog-shadow: rgba(0, 0, 0, 0.85);
   --scroll-thumb: rgba(255, 255, 255, 0.12);
   --scroll-thumb-hover: rgba(255, 255, 255, 0.22);
   --range-track: rgba(255, 255, 255, 0.1);
   --grid-rule: rgba(255, 255, 255, 0.022);
   /* canvases read these via readPalette */
-  --vis-peak: #fff1fa;
+  --vis-peak: #fff0f3;
   --vis-mid: rgb(var(--accent-tint-rgb));
   --vis-line: rgba(255, 255, 255, 0.75);
   --veil:
-    radial-gradient(110% 85% at 26% 0%, rgba(24, 9, 32, 0.3) 0%, rgba(13, 7, 20, 0.72) 55%, rgba(8, 5, 13, 0.88) 100%),
-    linear-gradient(180deg, rgba(10, 6, 16, 0.1) 0%, rgba(8, 5, 12, 0.45) 55%, rgba(6, 4, 10, 0.72) 100%);
+    radial-gradient(110% 85% at 26% 0%, rgba(30, 8, 14, 0.3) 0%, rgba(16, 7, 10, 0.72) 55%, rgba(9, 5, 7, 0.88) 100%),
+    linear-gradient(180deg, rgba(12, 6, 9, 0.1) 0%, rgba(9, 5, 7, 0.45) 55%, rgba(7, 4, 6, 0.72) 100%);
 }
 
 /*
@@ -99,38 +99,38 @@
 
 /* keep in step with @theme and :root */
 [data-appearance='dark'] {
-  --color-base: #0b0711;
-  --color-panel: #120c1a;
-  --color-raised: #1a1324;
-  --color-ink: #f5eff6;
-  --color-dim: #c0b4c6;
-  --color-muted: #8d8398;
+  --color-base: #0c0709;
+  --color-panel: #150b0f;
+  --color-raised: #1e1116;
+  --color-ink: #f6eef0;
+  --color-dim: #c7b5ba;
+  --color-muted: #95838a;
   --color-line: rgba(255, 255, 255, 0.09);
   --color-line-soft: rgba(255, 255, 255, 0.055);
   --color-hover: rgba(255, 255, 255, 0.06);
   --color-white: #fff;
 
   --glass-fill: rgba(255, 255, 255, 0.05);
-  --glass-fill-strong: rgba(24, 16, 33, 0.74);
+  --glass-fill-strong: rgba(30, 15, 20, 0.74);
   --glass-fill-soft: rgba(255, 255, 255, 0.03);
   --glass-line: rgba(255, 255, 255, 0.09);
   --glass-line-soft: rgba(255, 255, 255, 0.055);
   --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.075);
   --glass-blur: blur(22px) saturate(160%);
   --glass-hover: rgba(255, 255, 255, 0.08);
-  --glass-chrome: rgba(13, 8, 20, 0.52);
+  --glass-chrome: rgba(16, 8, 11, 0.52);
   --dialog-shadow: rgba(0, 0, 0, 0.85);
   --scroll-thumb: rgba(255, 255, 255, 0.12);
   --scroll-thumb-hover: rgba(255, 255, 255, 0.22);
   --range-track: rgba(255, 255, 255, 0.1);
   --grid-rule: rgba(255, 255, 255, 0.022);
-  --vis-peak: #fff1fa;
+  --vis-peak: #fff0f3;
   --vis-mid: rgb(var(--accent-tint-rgb));
   --vis-line: rgba(255, 255, 255, 0.75);
   --accent-text: var(--color-accent);
   --veil:
-    radial-gradient(110% 85% at 26% 0%, rgba(24, 9, 32, 0.3) 0%, rgba(13, 7, 20, 0.72) 55%, rgba(8, 5, 13, 0.88) 100%),
-    linear-gradient(180deg, rgba(10, 6, 16, 0.1) 0%, rgba(8, 5, 12, 0.45) 55%, rgba(6, 4, 10, 0.72) 100%);
+    radial-gradient(110% 85% at 26% 0%, rgba(30, 8, 14, 0.3) 0%, rgba(16, 7, 10, 0.72) 55%, rgba(9, 5, 7, 0.88) 100%),
+    linear-gradient(180deg, rgba(12, 6, 9, 0.1) 0%, rgba(9, 5, 7, 0.45) 55%, rgba(7, 4, 6, 0.72) 100%);
   color-scheme: dark;
 }
 
@@ -232,6 +232,14 @@
 
 /* over the veil, or it swallows them */
 .vitra-backdrop__particles {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* drawn at half size (Wave.tsx), stretched */
+.vitra-backdrop__wave {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -724,8 +732,8 @@
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(180deg, var(--color-base) 0%, rgb(11 7 17 / 0.4) 18%, rgb(11 7 17 / 0.35) 60%, rgb(11 7 17 / 0.9) 100%),
-    radial-gradient(80% 60% at 50% 45%, transparent 0%, rgb(11 7 17 / 0.55) 100%);
+    linear-gradient(180deg, var(--color-base) 0%, rgb(12 7 9 / 0.4) 18%, rgb(12 7 9 / 0.35) 60%, rgb(12 7 9 / 0.9) 100%),
+    radial-gradient(80% 60% at 50% 45%, transparent 0%, rgb(12 7 9 / 0.55) 100%);
 }
 
 /* transform also carries the inline anti-burn-in drift */
@@ -778,21 +786,6 @@ html[data-input='gamepad'] * {
   cursor: none !important;
 }
 
-.vitra-water {
-  pointer-events: none;
-  background:
-    repeating-linear-gradient(
-      to bottom,
-      var(--color-base) 0 1px,
-      transparent 1px 3px,
-      var(--color-base) 3px 5px,
-      transparent 5px 9px
-    );
-  opacity: 0.55;
-  -webkit-mask-image: linear-gradient(to bottom, #000 0%, transparent 100%);
-  mask-image: linear-gradient(to bottom, #000 0%, transparent 100%);
-}
-
 .vitra-horizon {
   pointer-events: none;
   height: 1px;
@@ -823,15 +816,16 @@ html[data-input='gamepad'] * {
     0 0 18px rgb(var(--accent-rgb) / 0.35);
 }
 
-/* splash: the sky box is box-reflected (one short-lived element, so that's fine) */
+/* splash: the sky and a flipped copy of it below the horizon, bent by an svg
+   ripple filter (Splash.tsx). short-lived, so two drawn logos and a filter are fine */
 .vitra-splash {
   position: fixed;
   inset: 0;
   z-index: 100;
   overflow: hidden;
   cursor: default;
-  /* #120b17 = the title bar */
-  background: linear-gradient(180deg, #120b17 0%, #150b1c 48%, #0b0711 56%, #08050d 100%);
+  /* #150a0e = the title bar */
+  background: linear-gradient(180deg, #150a0e 0%, #1a0b11 48%, #0c0709 56%, #080406 100%);
   transition:
     opacity 560ms cubic-bezier(0.4, 0, 0.2, 1),
     transform 560ms cubic-bezier(0.4, 0, 0.2, 1);
@@ -865,7 +859,7 @@ html[data-input='gamepad'] * {
   translate: -50% -50%;
   background: radial-gradient(50% 50% at 50% 50%, rgb(var(--accent-rgb) / 0.34), rgb(var(--accent-rgb) / 0) 70%);
   opacity: 0;
-  animation: vitra-glow 1700ms 350ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: vitra-glow 2600ms 600ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 .vitra-splash__horizon {
@@ -874,7 +868,7 @@ html[data-input='gamepad'] * {
   right: 0;
   top: 56%;
   transform: scaleX(0);
-  animation: vitra-draw 800ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: vitra-draw 1300ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .vitra-splash__sky {
@@ -885,7 +879,31 @@ html[data-input='gamepad'] * {
   height: 300px;
   translate: -50% 0;
   overflow: hidden;
-  -webkit-box-reflect: below 1px linear-gradient(transparent 38%, rgba(0, 0, 0, 0.55));
+}
+
+.vitra-splash__reflection {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(56% + 2px);
+  height: 300px;
+  overflow: hidden;
+  pointer-events: none;
+  filter: url(#vitra-splash-ripple);
+  opacity: 0.5;
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, rgba(0, 0, 0, 0.5) 30%, transparent 70%);
+  mask-image: linear-gradient(to bottom, #000 0%, rgba(0, 0, 0, 0.5) 30%, transparent 70%);
+}
+
+.vitra-splash__mirror {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 580px;
+  height: 300px;
+  translate: -50% 0;
+  overflow: hidden;
+  scale: 1 -1;
 }
 
 .vitra-splash__sun {
@@ -896,18 +914,20 @@ html[data-input='gamepad'] * {
   height: 176px;
   margin-left: -88px;
   border-radius: 50%;
+  /* the accent turned 40deg: the drawn V (accent and tint) stands off it with no outline */
   background: radial-gradient(
     circle at 50% 30%,
-    #fffafd 0%,
-    color-mix(in srgb, rgb(var(--accent-tint-rgb)) 60%, white) 38%,
-    color-mix(in srgb, var(--color-accent) 60%, white) 72%,
-    var(--color-accent) 100%
+    #fffaf4 0%,
+    oklch(from var(--color-accent) 0.93 0.05 calc(h + 40)) 38%,
+    oklch(from var(--color-accent) 0.82 0.11 calc(h + 40)) 72%,
+    oklch(from var(--color-accent) 0.72 0.15 calc(h + 40)) 100%
   );
   box-shadow:
-    0 0 50px 6px rgb(var(--accent-rgb) / 0.55),
-    0 0 120px 30px rgb(var(--accent-rgb) / 0.2);
+    0 0 50px 6px oklch(from var(--color-accent) 0.72 0.15 calc(h + 40) / 0.5),
+    0 0 120px 30px oklch(from var(--color-accent) 0.72 0.15 calc(h + 40) / 0.18);
   transform: translateY(240px);
-  animation: vitra-rise 1500ms 250ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  /* rises as the line finishes (Splash: 300ms delay + 2600ms draw) */
+  animation: vitra-rise 2200ms 2700ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 .vitra-splash__mark {
@@ -915,18 +935,8 @@ html[data-input='gamepad'] * {
   left: 50%;
   bottom: -6px;
   width: 150px;
+  height: 150px;
   margin-left: -75px;
-  filter: brightness(0) drop-shadow(0 0 0 rgb(var(--accent-rgb) / 0));
-  animation: vitra-light 700ms 1300ms ease-out forwards;
-}
-
-.vitra-splash__water {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: calc(56% + 1px);
-  height: 44%;
-  animation: vitra-ripple 2.4s linear infinite;
 }
 
 @keyframes vitra-draw {
@@ -944,22 +954,6 @@ html[data-input='gamepad'] * {
 @keyframes vitra-glow {
   to {
     opacity: 1;
-  }
-}
-
-@keyframes vitra-light {
-  to {
-    filter: brightness(1) drop-shadow(0 0 22px rgb(var(--accent-rgb) / 0.55));
-  }
-}
-
-/* 9px = one .vitra-water period, so it loops seamlessly */
-@keyframes vitra-ripple {
-  from {
-    background-position: 0 0;
-  }
-  to {
-    background-position: 0 9px;
   }
 }
 

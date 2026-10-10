@@ -77,7 +77,18 @@ function easeInOut(t: number): number {
   return t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2
 }
 
-export default function LogoDraw({ size = 168, delay = 0 }: { size?: number; delay?: number }) {
+// drawMs/fillMs: the splash plays it slower than big picture's curtain
+export default function LogoDraw({
+  size = 168,
+  delay = 0,
+  drawMs = DRAW_MS,
+  fillMs = FILL_MS
+}: {
+  size?: number
+  delay?: number
+  drawMs?: number
+  fillMs?: number
+}) {
   const id = useId().replace(/:/g, '')
   const stroke = useRef<SVGPathElement>(null)
   const fill = useRef<SVGGElement>(null)
@@ -137,19 +148,19 @@ export default function LogoDraw({ size = 168, delay = 0 }: { size?: number; del
         frame = requestAnimationFrame(loop)
         return
       }
-      const t = Math.min(1, elapsed / DRAW_MS)
+      const t = Math.min(1, elapsed / drawMs)
       const drawn = easeInOut(t) * total
 
       path.style.strokeDashoffset = String(total - drawn)
       const point = path.getPointAtLength(drawn)
       tipGroup.setAttribute('transform', `translate(${point.x} ${point.y})`)
-      tipGroup.style.opacity = t < 1 ? '1' : String(Math.max(0, 1 - (elapsed - DRAW_MS) / 250))
+      tipGroup.style.opacity = t < 1 ? '1' : String(Math.max(0, 1 - (elapsed - drawMs) / 250))
 
-      const f = Math.min(1, Math.max(0, (elapsed - DRAW_MS) / FILL_MS))
+      const f = Math.min(1, Math.max(0, (elapsed - drawMs) / fillMs))
       fillGroup.style.opacity = String(Math.min(1, f * 3))
       const level = WATER_BOTTOM - (1 - (1 - f) ** 3) * (WATER_BOTTOM - WATER_TOP)
       if (f > 0) setWater(level, elapsed / 1000)
-      const s = (elapsed - DRAW_MS - FILL_MS * 0.4) / SHEEN_MS
+      const s = (elapsed - drawMs - fillMs * 0.4) / SHEEN_MS
       sheenRect.setAttribute('x', String(-260 + Math.min(1, Math.max(0, s)) * 900))
       sheenRect.style.opacity = s > 0 && s < 1 ? '1' : '0'
 
@@ -199,7 +210,7 @@ export default function LogoDraw({ size = 168, delay = 0 }: { size?: number; del
     }
     frame = requestAnimationFrame(loop)
     return () => cancelAnimationFrame(frame)
-  }, [size, delay])
+  }, [size, delay, drawMs, fillMs])
 
   const pad = size * 0.35
   return (

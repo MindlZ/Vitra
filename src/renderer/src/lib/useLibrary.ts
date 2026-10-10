@@ -6,11 +6,13 @@ import { copyIds, mergeDuplicates } from './duplicates'
 
 const DEFAULT_SETTINGS: Settings = {
   scanOnStart: true,
+  autoTags: true,
   trackPlaytime: true,
   minimiseOnLaunch: true,
   showFriends: true,
   backgroundDim: 65,
   backgroundParticles: true,
+  backgroundWave: true,
   glassBlur: true,
   visualiserPeaks: true,
   visualiserGlow: true,
@@ -24,13 +26,15 @@ const DEFAULT_SETTINGS: Settings = {
   lyricsWidgetSize: 'medium',
   visualiserWidgetSize: 'medium',
   perfOverlay: false,
-  wallpaper: 'sunset',
+  ambientSound: false,
+  ambientVolume: 40,
+  wallpaper: 'crimson',
   desktopScreen: 0,
   theme: 'auto',
   accentSource: 'wallpaper',
-  // the brand magenta
-  accentHue: 344,
-  accentChroma: 0.2,
+  // the brand crimson
+  accentHue: 15,
+  accentChroma: 0.23,
   programsView: 'library',
   bigPictureOnStart: false,
   closeToTray: true,
@@ -40,6 +44,12 @@ const DEFAULT_SETTINGS: Settings = {
   discordPresence: false,
   screenSaverMinutes: 5
 }
+
+const ART_FIELDS: Array<[ArtKind, 'coverFile' | 'heroFile' | 'logoFile']> = [
+  ['cover', 'coverFile'],
+  ['hero', 'heroFile'],
+  ['logo', 'logoFile']
+]
 
 export interface LibraryState {
   games: Game[]
@@ -60,10 +70,21 @@ export function useLibrary() {
     lastScan: null
   })
   const mounted = useRef(true)
+  const lastGames = useRef<Game[]>([])
 
   const refresh = useCallback(async () => {
     const snapshot = await window.launcher.getLibrary()
     if (!mounted.current) return
+    // main drops auto-fetched art on a rename; the cached url would point at a deleted file
+    const before = new Map(lastGames.current.map((game) => [game.id, game]))
+    for (const game of snapshot.games) {
+      const prev = before.get(game.id)
+      if (!prev) continue
+      for (const [kind, field] of ART_FIELDS) {
+        if (prev[field] && prev[field] !== game[field]) invalidateArt(game.id, kind)
+      }
+    }
+    lastGames.current = snapshot.games
     setState((prev) => ({
       ...prev,
       games: snapshot.games,
@@ -110,7 +131,8 @@ export function useLibrary() {
       games: prev.games.map((g) => (g.id === id ? { ...g, ...changes } : g))
     }))
     await window.launcher.patchGame(id, changes)
-  }, [])
+    if ('name' in changes) await refresh()
+  }, [refresh])
 
   const launch = useCallback(async (id: string) => window.launcher.launch(id), [])
 
@@ -152,6 +174,17 @@ export function useLibrary() {
       forgetMissingArt()
     }
     return settings
+  }, [])
+
+  const addGameFolder = useCallback(async () => {
+    const settings = await window.launcher.addGameFolder?.()
+    if (settings) setState((prev) => ({ ...prev, settings }))
+    return Boolean(settings)
+  }, [])
+
+  const removeGameFolder = useCallback(async (index: number) => {
+    const settings = await window.launcher.removeGameFolder?.(index)
+    if (settings) setState((prev) => ({ ...prev, settings }))
   }, [])
 
   // renderer can hot-reload ahead of preload
@@ -205,6 +238,8 @@ export function useLibrary() {
     clearArt,
     updateSettings,
     pickSteamPath,
+    addGameFolder,
+    removeGameFolder,
     pickBackground,
     clearBackground,
     openFolder: (id: string) => window.launcher.openFolder(id),

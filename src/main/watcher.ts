@@ -4,7 +4,8 @@ import { runCommand } from './paths'
 import type { Game } from '../shared/types'
 
 const EXE_BLACKLIST = [
-  /crash/i,
+  // not bare /crash/: that took Crashlands
+  /crash_?(report|handler|sender|dump|pad|uploader)/i,
   /^unins/i,
   /vcredist/i,
   /dxsetup|directx/i,
@@ -41,7 +42,7 @@ function isPlausibleGameExe(name: string): boolean {
 }
 
 // bounded: game folders can be enormous
-async function findExecutables(root: string, maxDepth = 4, budget = 4000): Promise<string[]> {
+export async function findExecutables(root: string, maxDepth = 4, budget = 4000): Promise<string[]> {
   const found: string[] = []
   let visited = 0
 
@@ -69,7 +70,7 @@ async function findExecutables(root: string, maxDepth = 4, budget = 4000): Promi
   return found
 }
 
-function similarity(exe: string, title: string): number {
+export function similarity(exe: string, title: string): number {
   const normalise = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]/g, '')
   const a = normalise(basename(exe, '.exe'))
   const b = normalise(title)

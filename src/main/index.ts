@@ -15,7 +15,8 @@ import { artDir, getGame, getGames, getSettings, load, patchGame, publicSettings
 import { addManualGame, classifySoftware, scanLibrary } from './library'
 import { adoptRunningGames, cancelAllTracking, launchGame, onRunningChange, runningStates, stopTracking } from './launch'
 import { discordConfigured, stopPresence, updatePresence } from './discord'
-import { clearArt, ensureArt, retryMissingArt, setLocalArt, type ArtKind } from './art'
+import { autoTagGames } from './autoTags'
+import { clearArt, ensureArt, refetchAutoArt, retryMissingArt, setLocalArt, type ArtKind } from './art'
 import { getFriends, invalidateFriends, joinFriend } from './friends'
 import { getSessions } from './sessions'
 import { exportBackup, importBackup } from './backup'
@@ -137,8 +138,10 @@ function classifyInBackground(): void {
   if (classifying) return
   classifying = true
   void classifySoftware()
-    .then((changed) => {
-      if (changed) mainWindow?.webContents.send('library:changed', null)
+    .then(async (classified) => {
+      // after: tagging skips software
+      const tagged = await autoTagGames()
+      if (classified || tagged) mainWindow?.webContents.send('library:changed', null)
     })
     .catch((err) => console.error('[classify]', err))
     .finally(() => {
@@ -154,7 +157,7 @@ function createWindow(): void {
     show: false,
     fullscreen: getSettings().bigPictureOnStart,
     icon: appIcon(),
-    backgroundColor: '#0b0711',
+    backgroundColor: '#0c0709',
     autoHideMenuBar: true,
     // hidden (no overlay) keeps resize borders + snap; controls are our own
     titleBarStyle: 'hidden',
@@ -224,6 +227,7 @@ function applySettings(patch: Partial<Settings>): Settings {
   setSettings(patch)
 
   if ('openAtLogin' in patch) applyLoginItem(Boolean(patch.openAtLogin))
+  if (patch.autoTags) classifyInBackground()
   if ('steamWebApiKey' in patch || 'xboxApiKey' in patch) invalidateFriends()
   if ('steamWebApiKey' in patch) clearAchievements()
   if ('discordPresence' in patch) updatePresence()
@@ -284,7 +288,7 @@ function registerIpc(): void {
   ipcMain.handle('game:launch', (_event, id: string) => launchGame(id))
   ipcMain.handle('game:stop-tracking', (_event, id: string) => stopTracking(id))
 
-  ipcMain.handle('game:patch', (_event, id: string, patch: Partial<Game>) => {
+  ipcMain.handle('game:patch', async (_event, id: string, patch: Partial<Game>) => {
     // whitelist. never exePath / launcher / companions: the renderer mustn't choose what runs
     const allowed: Partial<Game> = {}
     if (typeof patch.name === 'string' && patch.name.trim()) allowed.name = patch.name.trim()
@@ -300,10 +304,24 @@ function registerIpc(): void {
     if (typeof patch.playtimeSeconds === 'number' && patch.playtimeSeconds >= 0) {
       allowed.playtimeSeconds = Math.round(patch.playtimeSeconds)
     }
-    return patchGame(id, allowed)
+    const renamed = allowed.name !== undefined && allowed.name !== getGame(id)?.name
+    if (renamed) allowed.autoName = false
+    // an untagged game Steam couldn't match may match under its new name
+    if (renamed && !getGame(id)?.tags.length && !allowed.tags?.length) allowed.autoTagged = undefined
+    const game = patchGame(id, allowed)
+    if (renamed) await refetchAutoArt(id)
+    return game
   })
 
-  ipcMain.handle('game:remove', (_event, id: string) => removeGame(id))
+  ipcMain.handle('game:remove', (_event, id: string) => {
+    const exe = getGame(id)?.exePath
+    // a folder scan would bring it straight back
+    if (id.startsWith('local:') && exe) {
+      const dismissed = getSettings().dismissedGames ?? []
+      setSettings({ dismissedGames: [...new Set([...dismissed, exe.toLowerCase()])] })
+    }
+    return removeGame(id)
+  })
 
   const pickProgram = async (title: string): Promise<string | undefined> => {
     const result = await dialog.showOpenDialog({
@@ -380,6 +398,8 @@ function registerIpc(): void {
     delete rest.visualiserWidgetPos
     delete rest.lyricsWidgetPos
     delete rest.windowState
+    delete rest.gameFolders
+    delete rest.dismissedGames
     // copied first, so the reply already carries the image
     if (rest.wallpaper === 'desktop') await syncDesktopWallpaper()
     return applySettings(rest)
@@ -456,6 +476,27 @@ function registerIpc(): void {
     })
     if (result.canceled || !result.filePaths.length) return null
     return applySettings({ steamPath: result.filePaths[0] })
+  })
+
+  ipcMain.handle('settings:add-game-folder', async () => {
+    const result = await dialog.showOpenDialog({
+      title: 'Choose a folder of games',
+      properties: ['openDirectory']
+    })
+    if (result.canceled || !result.filePaths.length) return null
+    const folders = getSettings().gameFolders ?? []
+    const path = result.filePaths[0]
+    if (folders.some((folder) => folder.toLowerCase() === path.toLowerCase())) return publicSettings()
+    setSettings({ gameFolders: [...folders, path] })
+    return publicSettings()
+  })
+
+  // by index: the renderer only picks from main's own list
+  ipcMain.handle('settings:remove-game-folder', (_event, index: number) => {
+    const folders = getSettings().gameFolders ?? []
+    if (!Number.isInteger(index) || !folders[index]) return publicSettings()
+    setSettings({ gameFolders: folders.filter((_, i) => i !== index) })
+    return publicSettings()
   })
 }
 

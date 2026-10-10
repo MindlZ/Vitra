@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import logo from '../assets/vitra-logo.png'
+import LogoDraw from './LogoDraw'
 import { playStartup } from '../lib/sound'
 
 interface Props {
@@ -7,8 +7,13 @@ interface Props {
   onDone: () => void
 }
 
-const MIN_MS = 2250
-const MAX_MS = 5000
+// the line draws, the water fills, then the sun rises behind it: ~5s from the
+// beat, timed to startup.mp3. the sun's delay in .vitra-splash__sun follows these
+const MIN_MS = 5400
+const MAX_MS = 8000
+const LOGO_DELAY_MS = 300
+const LOGO_DRAW_MS = 2600
+const LOGO_FILL_MS = 1400
 // matches the .vitra-splash transition
 const LEAVE_MS = 560
 
@@ -36,6 +41,20 @@ let startup: Promise<void> | undefined
 function startStartupSound(): Promise<void> {
   startup ??= whenVisible().then(() => playStartup(0.45))
   return startup
+}
+
+// the sun and the drawn V; mounted on the beat so the drawing starts with the sound
+function Scene({ started }: { started: boolean }) {
+  return (
+    <>
+      <div className="vitra-splash__sun" />
+      {started && (
+        <div className="vitra-splash__mark">
+          <LogoDraw size={150} delay={LOGO_DELAY_MS} drawMs={LOGO_DRAW_MS} fillMs={LOGO_FILL_MS} />
+        </div>
+      )}
+    </>
+  )
 }
 
 export default function Splash({ ready, onDone }: Props) {
@@ -106,11 +125,31 @@ export default function Splash({ ready, onDone }: Props) {
       <div className="vitra-splash__drag" />
       <div className="vitra-splash__glow" />
       <div className="vitra-splash__sky">
-        <div className="vitra-splash__sun" />
-        <img src={logo} alt="" draggable={false} className="vitra-splash__mark" />
+        <Scene started={started} />
       </div>
-      <div className="vitra-water vitra-splash__water" />
+      {/* a second copy, flipped and bent by the ripple filter: water, not a mirror */}
+      <div className="vitra-splash__reflection">
+        <div className="vitra-splash__mirror">
+          <Scene started={started} />
+        </div>
+      </div>
       <div className="vitra-horizon vitra-splash__horizon" />
+      <svg aria-hidden width="0" height="0" className="absolute">
+        <filter id="vitra-splash-ripple" x="-5%" y="-5%" width="110%" height="110%">
+          {/* wide, flat noise: the reflection bends sideways in bands, like swell */}
+          <feTurbulence type="fractalNoise" baseFrequency="0.004 0.055" numOctaves="2" seed="7">
+            <animate
+              attributeName="baseFrequency"
+              values="0.004 0.055;0.0046 0.064;0.004 0.055"
+              dur="6s"
+              repeatCount="indefinite"
+            />
+          </feTurbulence>
+          <feDisplacementMap in="SourceGraphic" scale="26" xChannelSelector="R" yChannelSelector="G" />
+          {/* a little scatter, mostly vertical */}
+          <feGaussianBlur stdDeviation="0.8 2.2" />
+        </filter>
+      </svg>
     </div>
   )
 }

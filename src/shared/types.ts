@@ -67,6 +67,10 @@ export interface Game {
   sessions: number
   lastPlayed?: number
   addedAt: number
+  // the name was guessed from the exe/folder, so a scan may improve it; false once the user renames
+  autoName?: boolean
+  // tags from Steam's store data were added once; after that the tags are the user's
+  autoTagged?: boolean
 
   // main's file dialog only
   companions?: string[]
@@ -82,6 +86,8 @@ export interface Game {
 export interface Settings {
   steamPath?: string
   scanOnStart: boolean
+  // genre/co-op tags from Steam's store, once per game
+  autoTags: boolean
   trackPlaytime: boolean
   // when a game starts, not when Vitra does
   minimiseOnLaunch: boolean
@@ -91,6 +97,8 @@ export interface Settings {
   showFriends: boolean
   backgroundDim: number
   backgroundParticles: boolean
+  // the PS3-style ribbon (Wave.tsx) behind Home, big picture Home and the screen saver
+  backgroundWave: boolean
   // backdrop-filter on every glass surface; off for weaker GPUs
   glassBlur: boolean
   visualiserPeaks: boolean
@@ -112,6 +120,9 @@ export interface Settings {
   // main sets it when the widget is dragged
   visualiserWidgetPos?: { x: number; y: number }
   perfOverlay: boolean
+  // generated menu ambience (lib/ambient.ts), only while Vitra has focus
+  ambientSound: boolean
+  ambientVolume: number
   // main sets it as the window moves
   windowState?: { x: number; y: number; width: number; height: number; maximized: boolean }
   // a custom image is kept while a preset shows
@@ -126,8 +137,13 @@ export interface Settings {
   desktopStamp?: string
   // which of desktopScreens shows
   desktopScreen: number
+  // main's: they decide which exes become launchable, so only its dialog adds one.
+  // unset = never seeded; the first scan fills it with drive-root Games folders
+  gameFolders?: string[]
+  // lowercased exe paths removed from the library, so a folder scan doesn't re-add them
+  dismissedGames?: string[]
   theme: Theme
-  // wallpaper = sampled from it, vitra = the stylesheet's magenta, custom = hue/chroma
+  // wallpaper = sampled from it, vitra = the stylesheet's crimson, custom = hue/chroma
   accentSource: AccentSource
   accentHue: number
   accentChroma: number
@@ -152,7 +168,7 @@ export type WidgetKind = 'visualiser' | 'lyrics'
 export type Theme = 'auto' | 'light' | 'dark'
 export type Appearance = 'light' | 'dark'
 
-export type WallpaperPreset = 'sunset' | 'smoke' | 'tree' | 'moon'
+export type WallpaperPreset = 'crimson' | 'smoke' | 'tree' | 'moon'
 export type Wallpaper = WallpaperPreset | 'custom' | 'desktop'
 
 export type AccentSource = 'wallpaper' | 'vitra' | 'custom'

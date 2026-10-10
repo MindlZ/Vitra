@@ -67,6 +67,8 @@ export interface LauncherApi {
 
   setSettings(patch: Partial<Settings>): Promise<Settings>
   pickSteamPath(): Promise<Settings | null>
+  addGameFolder(): Promise<Settings | null>
+  removeGameFolder(index: number): Promise<Settings>
   pickBackground(): Promise<Settings | null>
   clearBackground(): Promise<Settings>
 

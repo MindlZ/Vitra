@@ -322,7 +322,7 @@ export default function GameDetail({
     <div
       className="h-full w-full"
       style={{
-        background: `radial-gradient(120% 110% at 70% 100%, hsl(${hue} 48% 30%) 0%, hsl(${(hue + 30) % 360} 40% 14%) 55%, #0c0713 100%)`
+        background: `radial-gradient(120% 110% at 70% 100%, hsl(${hue} 48% 30%) 0%, hsl(${(hue + 30) % 360} 40% 14%) 55%, #0c0709 100%)`
       }}
     />
   )

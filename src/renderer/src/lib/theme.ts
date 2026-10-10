@@ -66,8 +66,8 @@ export function readPalette(el: Element = document.documentElement): {
   bottom: string
 } {
   const css = getComputedStyle(el)
-  const accent = css.getPropertyValue('--accent-rgb').trim() || '255 110 203'
-  const tint = css.getPropertyValue('--accent-tint-rgb').trim() || '255 190 232'
+  const accent = css.getPropertyValue('--accent-rgb').trim() || '255 57 99'
+  const tint = css.getPropertyValue('--accent-tint-rgb').trim() || '255 204 206'
   return {
     accent,
     tint,
